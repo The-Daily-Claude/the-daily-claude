@@ -2,7 +2,12 @@
 
 Read this at the start of every session. Update it before context compaction or session end.
 
-**Last updated:** 2026-04-09 (fresh start — 2-repo split from `Bande-a-Bonnot/the-daily-claude`)
+**Last updated:** 2026-04-09 EOD (initial commit `339728b`, plus `5366bec` adding `bikeshedding` category to the extractor prompt)
+
+## Recent
+
+- **`5366bec` — `bikeshedding` category added to `crates/trawl/prompts/extractor.md`.** New top-level category in the enum alongside `rage | comedy | existential | spectacular-failure | wholesome | role-reversal | dark-comedy | meta | other`, plus a "What counts as a moment" paragraph describing the shape: *long exchange about the 'right way' to do something trivial or unsanctioned; the joke is the gap between effort invested and value of what's being discussed.* Seeded by a real beat — a bot-review loop bikeshedding `--force` atomicity on a flag the product owner didn't know existed. Prompt-hash change will invalidate the trawl state cache on the next run, which is intentional — previously-processed sessions get another pass with the new category available.
+- **`AGENTS.md`** — committed as a contributor guide for agents that look for `AGENTS.md` instead of `CLAUDE.md` (Codex, OpenCode, etc.). Mirror of `CLAUDE.md` with the header adjusted.
 
 ## Repo context
 
