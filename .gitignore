@@ -1,0 +1,29 @@
+# Rust
+target/
+Cargo.lock.bak
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets (never commit — keep them outside the repo)
+credentials/
+*.env
+.env.*
+config/secrets.toml
+
+# Local anonymization patterns (contain real PII when used)
+anonymize.local.toml
+crates/trawl/anonymize.local.toml
+
+/workspace/
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

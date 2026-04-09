@@ -1,0 +1,24 @@
+# Trawl local anonymization patterns (COPY TO `anonymize.local.toml`)
+#
+# This file lets you anonymize content that contains personal details
+# specific to you or your collaborators. The real file must be GITIGNORED
+# so that personal patterns never enter source control.
+#
+# Format: one rule per line, `<regex> -> <replacement>`
+# Lines starting with `#` and blank lines are ignored.
+#
+# Replacement placeholders (resolved per-entry from random pools):
+#   {name}         — a random name from NAMES (Alice, Bob, ...)
+#   {city}         — a random city from CITIES (Tokyo, Berlin, ...)
+#   {nationality}  — a random nationality from NATIONALITIES
+#   {language}     — a random language from LANGUAGES
+#
+# Setup:
+#   1. cp anonymize.local.toml.example anonymize.local.toml
+#   2. Add your own patterns below (do NOT commit the copy)
+#   3. Run trawl — patterns load from the file automatically
+
+# Example (delete these and add your own):
+# \bAlex Example\b -> {name}
+# (?i)near Springfield -> near {city}
+# (?i)\bExamplelander\b -> {nationality}

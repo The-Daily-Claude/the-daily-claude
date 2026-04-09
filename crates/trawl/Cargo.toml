@@ -1,0 +1,28 @@
+[package]
+name = "trawl"
+version = "0.1.0"
+description = "Extract remarkable moments from Claude Code session logs"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+clap.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+rand.workspace = true
+regex.workspace = true
+walkdir.workspace = true
+
+[[bin]]
+name = "trawl"
+path = "src/main.rs"
+
+[lib]
+name = "trawl"
+path = "src/lib.rs"

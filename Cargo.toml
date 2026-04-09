@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/trawl",
+]
+
+[workspace.package]
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/The-Daily-Claude/the-daily-claude"
+authors = ["La Bande à Bonnot OÜ"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+clap = { version = "4", features = ["derive"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+rand = { version = "0.8", features = ["small_rng"] }
+regex = "1"
+walkdir = "2"
+tempfile = "3"
+dirs = "6"
