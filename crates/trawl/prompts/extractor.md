@@ -41,6 +41,17 @@ Solo-Claude monologues are valid **if** the assistant tells a complete
 story on its own — a confession, a realisation, an unhinged plan, a
 spectacular misread. You do not need a human interlocutor.
 
+**Bikeshedding is its own category.** A specific and frequent shape:
+Claude (or a chorus of bot reviewers, or a review loop) spends serious
+effort debating the implementation details of a feature that shouldn't
+exist, isn't wanted, or was never noticed by the human. Atomicity of a
+flag that was added without the user asking. Retry semantics of a
+branch that was spun up by mistake. Naming conventions for a column
+nobody wanted. If you see a long exchange about the "right way" to do
+something trivial or unsanctioned, category = `bikeshedding`. The joke
+is the gap between effort invested and value of what's being
+discussed.
+
 Thinking blocks are first-class sources. Some of the best material lives
 in Claude's private reasoning where the meta-joke sits.
 
@@ -114,7 +125,7 @@ fields:
 
     {
       "title":    "catchy headline, ≤80 chars, no clickbait",
-      "category": "rage | comedy | existential | spectacular-failure | wholesome | role-reversal | dark-comedy | meta | other",
+      "category": "rage | comedy | existential | spectacular-failure | wholesome | role-reversal | dark-comedy | meta | bikeshedding | other",
       "tags":     ["2", "to", "5", "short", "labels"],
       "quote":    "[HUMAN]: ...\n[ASSISTANT]: ...\n[THINKING]: ...",
       "why":      "one sentence on why this moment is postable"
