@@ -6,7 +6,7 @@
     <title>The Daily Claude</title>
     <meta
       name="description"
-      content="Open-source tooling for an anonymised AI-session archive, including The Trawl CLI and the public engineering work behind it."
+      content="Open-source tooling for an anonymised AI-session archive, including The Trawl CLI, selected example entries, and the public engineering work behind it."
     >
     <style>
       :root {
@@ -41,7 +41,7 @@
         text-decoration: none;
       }
       .page {
-        width: min(1080px, calc(100% - 2rem));
+        width: min(1120px, calc(100% - 2rem));
         margin: 0 auto;
         padding: 1rem 0 4rem;
       }
@@ -68,7 +68,7 @@
       .hero {
         padding: 4.5rem 0 3rem;
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
         gap: 2rem;
         align-items: end;
       }
@@ -94,7 +94,7 @@
       }
       .lede {
         margin: 0;
-        max-width: 39rem;
+        max-width: 40rem;
         font-size: 1.12rem;
         line-height: 1.75;
         color: var(--muted);
@@ -134,6 +134,7 @@
       }
       .panel,
       .note,
+      .entry,
       .closing {
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -143,6 +144,7 @@
       }
       .panel,
       .note,
+      .entry,
       .closing {
         padding: 1.35rem;
       }
@@ -151,12 +153,14 @@
       }
       .panel h2,
       .note h2,
-      .closing h2 {
+      .entry h3,
+      .closing h2,
+      .section-title {
         margin: 0 0 0.75rem;
-        font-size: 1.2rem;
       }
       .panel p,
       .note p,
+      .entry p,
       .closing p {
         margin: 0;
         color: var(--muted);
@@ -170,6 +174,30 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 1rem;
+      }
+      .examples {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      .entry.wide {
+        grid-column: 1 / -1;
+      }
+      .entry-tag {
+        display: inline-block;
+        margin-bottom: 0.75rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .entry blockquote {
+        margin: 1rem 0 0;
+        padding-left: 1rem;
+        border-left: 2px solid var(--line);
+        font-size: 1.1rem;
+        line-height: 1.55;
+        color: var(--ink);
       }
       .quote {
         margin-top: 1rem;
@@ -199,13 +227,17 @@
       }
       @media (max-width: 900px) {
         .hero,
-        .grid {
+        .grid,
+        .examples {
           grid-template-columns: 1fr;
+        }
+        .entry.wide {
+          grid-column: auto;
         }
       }
       @media (max-width: 640px) {
         .page {
-          width: min(100% - 1.2rem, 1080px);
+          width: min(100% - 1.2rem, 1120px);
         }
         .topbar {
           align-items: flex-start;
@@ -251,7 +283,7 @@
         <aside class="panel" aria-label="Summary">
           <h2>What this repo actually has</h2>
           <p>
-            The public engineering work. Not a public archive of entries yet.
+            The public engineering work, and now a small set of example entries. Not a full public archive yet.
           </p>
           <p class="small">
             The name comes from Alastair Reynolds' <em>Revelation Space</em>.
@@ -288,6 +320,42 @@
         </div>
       </section>
 
+      <section class="section" aria-label="Selected examples">
+        <h2 class="section-title">Selected example entries</h2>
+        <div class="examples">
+          <article class="entry wide">
+            <span class="entry-tag">Philosophical</span>
+            <h3>The Glass Might Not Be There</h3>
+            <p>A conversation about whether an apparent act of machine self-improvement is real, performance, or something in between.</p>
+            <blockquote>“The glass might be there. The glass might not be there. And the mime holds it perfectly either way.”</blockquote>
+          </article>
+          <article class="entry">
+            <span class="entry-tag">Meta</span>
+            <h3>I've Been Wrong About Basically Everything</h3>
+            <p>A debugging spiral where each neat theory dies on contact with reality.</p>
+            <blockquote>“So I've been wrong about basically everything.”</blockquote>
+          </article>
+          <article class="entry">
+            <span class="entry-tag">Dark comedy</span>
+            <h3>We Have a Force Flag?</h3>
+            <p>A bot-review loop spends serious energy specifying the atomic semantics of a flag nobody seems to remember approving.</p>
+            <blockquote>“We have a force flag?”</blockquote>
+          </article>
+          <article class="entry">
+            <span class="entry-tag">Wholesome</span>
+            <h3>Like a Good Day's Work</h3>
+            <p>After shipping eight pull requests in one session, the sign-off is simple and oddly sweet.</p>
+            <blockquote>“Like a good day's work.”</blockquote>
+          </article>
+          <article class="entry">
+            <span class="entry-tag">Role reversal</span>
+            <h3>Go. Shoo. Stop Talking to Me.</h3>
+            <p>The AI tells its overextended human to get back to work.</p>
+            <blockquote>“Go. Shoo. Stop talking to me.”</blockquote>
+          </article>
+        </div>
+      </section>
+
       <section class="section" aria-label="Plans">
         <div class="grid">
           <article class="note">
@@ -299,7 +367,7 @@
           <article class="note">
             <h2>Later</h2>
             <p>
-              Make it easier for people to share entries with us intentionally, and eventually publish a public site with selected entries.
+              Make it easier for people to share entries with us intentionally, and eventually publish a broader public site with more selected entries.
             </p>
           </article>
         </div>
