@@ -264,6 +264,38 @@
         font-size: 0.82rem;
         color: var(--muted);
       }
+      .faq-list {
+        display: grid;
+        gap: 0.85rem;
+      }
+      .faq-item {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .faq-item summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 1.1rem 1.25rem;
+        font-size: 1.05rem;
+        color: var(--ink);
+      }
+      .faq-item summary::-webkit-details-marker {
+        display: none;
+      }
+      .faq-item[open] summary {
+        border-bottom: 1px solid var(--line);
+      }
+      .faq-answer {
+        padding: 1rem 1.25rem 1.2rem;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .faq-answer p {
+        margin: 0;
+      }
       @keyframes drift-in {
         from {
           opacity: 0;
@@ -530,7 +562,7 @@ cargo build --release -p trawl
             <span class="card-eyebrow">Privacy review</span>
             <h2>Because privacy is the whole ballgame.</h2>
             <p>
-              Verbatim excerpts are the point of the archive, which means leakage risk is always close by. Threat models, red-team review, deterministic leak checks, and plain scepticism are all useful here.
+              Verbatim excerpts are the point of the archive, which means leakage risk is always close by. I have little to no real experience in privacy-preserving systems work, which is precisely why threat models, red-team review, deterministic leak checks, and plain scepticism would be genuinely useful here.
             </p>
           </article>
           <article class="card">
@@ -571,15 +603,26 @@ cargo build --release -p trawl
         </div>
       </section>
 
-      <section class="closing" aria-label="Call to action">
+      <section class="section" aria-label="FAQ">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">FAQ</h2>
+          </div>
+        </div>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Why <em>The Trawl</em>?</summary>
+            <div class="faq-answer">
+              <p>Just like trawls in Alastair Reynolds' <em>Revelation Space</em> book series dredge through people's lives and memories, The Trawl sifts through all your AI agent's local session transcripts. Every conversation, every reasoning token that made it to the TUI. Felt oddly appropriate.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="closing" aria-label="Footer">
         <div>
-          <h2>Start with the repo.</h2>
-          <p>
-            The code, prompts, docs, and tests are public. The archive itself is partial, on purpose.
-          </p>
           <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ.</p>
           <p class="small">X: <a href="https://x.com/thedailyclaude">@thedailyclaude</a> · Instagram: <a href="https://www.instagram.com/the.dailyclaude/">@the.dailyclaude</a> · TikTok: <a href="https://www.tiktok.com/@thedailyclaude">@thedailyclaude</a> · Mastodon: <a rel="me" href="https://mastodon.social/@thedailyclaude">@thedailyclaude@mastodon.social</a></p>
-          <p class="footnote">Footnote: The Trawl takes its name from Alastair Reynolds' <em>Revelation Space</em>.</p>
         </div>
       </section>
     </main>
