@@ -425,12 +425,12 @@ cargo build --release -p trawl
           </article>
           <article class="card">
             <span class="card-eyebrow">Linux</span>
-            <h2>Same flow, same repo, same first command.</h2>
-            <p>If your Claude Code logs live somewhere else, point <code>trawl</code> at that tree instead. The rest is in the README.</p>
+            <h2>Build it, then dry-run one session.</h2>
+            <p>Install Rust and make sure you already have Claude Code logs under <code>~/.claude/projects/</code>. If yours live elsewhere, point <code>trawl</code> there instead.</p>
             <pre><code>git clone https://github.com/The-Daily-Claude/the-daily-claude
 cd the-daily-claude
 cargo build --release -p trawl
-./target/release/trawl ~/.claude/projects/ --concurrency 3 -o content/entries/</code></pre>
+./target/release/trawl --dry-run ~/.claude/projects/&lt;slug&gt;/&lt;uuid&gt;.jsonl</code></pre>
           </article>
         </div>
       </section>
