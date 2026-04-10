@@ -6,7 +6,7 @@
     <title>The Daily Claude</title>
     <meta
       name="description"
-      content="A public home for The Daily Claude, built from anonymised entries from a few volunteer contributors, and for The Trawl, the CLI that mines session logs for the moments worth remembering."
+      content="Open-source tooling for an anonymised AI-session archive, including The Trawl CLI and the public engineering work behind it."
     >
     <style>
       :root {
@@ -22,13 +22,11 @@
       }
 
       * { box-sizing: border-box; }
-
       html {
         background: linear-gradient(180deg, #faf6ef 0%, #f1e8da 100%);
         color: var(--ink);
         scroll-behavior: smooth;
       }
-
       body {
         margin: 0;
         font-family: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", Georgia, serif;
@@ -38,18 +36,15 @@
           radial-gradient(circle at 85% 20%, rgba(129, 171, 146, 0.18), transparent 24%),
           linear-gradient(180deg, #faf6ef 0%, #f1e8da 100%);
       }
-
       a {
         color: inherit;
         text-decoration: none;
       }
-
       .page {
         width: min(1080px, calc(100% - 2rem));
         margin: 0 auto;
         padding: 1rem 0 4rem;
       }
-
       .topbar {
         display: flex;
         justify-content: space-between;
@@ -57,14 +52,12 @@
         gap: 1rem;
         padding: 1rem 0 0;
       }
-
       .wordmark {
         font-size: 0.95rem;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
       }
-
       .nav {
         display: flex;
         gap: 1rem;
@@ -72,7 +65,6 @@
         font-size: 0.95rem;
         color: var(--muted);
       }
-
       .hero {
         padding: 4.5rem 0 3rem;
         display: grid;
@@ -80,7 +72,6 @@
         gap: 2rem;
         align-items: end;
       }
-
       .eyebrow {
         display: inline-flex;
         align-items: center;
@@ -93,7 +84,6 @@
         font-size: 0.9rem;
         backdrop-filter: blur(10px);
       }
-
       h1 {
         margin: 1.25rem 0 1rem;
         font-size: clamp(3rem, 6vw, 5.8rem);
@@ -102,22 +92,19 @@
         letter-spacing: -0.04em;
         max-width: 9ch;
       }
-
       .lede {
         margin: 0;
-        max-width: 36rem;
-        font-size: 1.15rem;
-        line-height: 1.7;
+        max-width: 39rem;
+        font-size: 1.12rem;
+        line-height: 1.75;
         color: var(--muted);
       }
-
       .actions {
         display: flex;
         gap: 0.9rem;
         flex-wrap: wrap;
         margin-top: 2rem;
       }
-
       .button {
         display: inline-flex;
         align-items: center;
@@ -128,127 +115,78 @@
         border: 1px solid transparent;
         transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
       }
-
       .button:focus-visible,
       .nav a:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;
       }
-
       .button.primary {
         background: var(--ink);
         color: #fffaf4;
       }
-
       .button.secondary {
         border-color: var(--line);
         background: rgba(255, 255, 255, 0.36);
         color: var(--ink);
       }
-
       .button:hover {
         transform: translateY(-1px);
       }
-
-      .aside-card,
-      .quote,
-      .note {
+      .panel,
+      .note,
+      .closing {
         border: 1px solid var(--line);
         border-radius: var(--radius);
         background: var(--surface);
         backdrop-filter: blur(16px);
         box-shadow: var(--shadow);
       }
-
-      .aside-card {
-        padding: 1.4rem;
-        animation: drift-in 700ms ease-out both;
-      }
-
-      .aside-card p {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.65;
-      }
-
-      .aside-card strong {
-        display: block;
-        margin-bottom: 0.55rem;
-        color: var(--ink);
-        font-size: 1.05rem;
-      }
-
-      .section {
-        padding: 1.5rem 0;
-      }
-
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 1rem;
-      }
-
+      .panel,
       .note,
-      .quote,
       .closing {
         padding: 1.35rem;
       }
-
+      .panel {
+        animation: drift-in 700ms ease-out both;
+      }
+      .panel h2,
       .note h2,
-      .quote h2,
       .closing h2 {
         margin: 0 0 0.75rem;
         font-size: 1.2rem;
       }
-
+      .panel p,
       .note p,
-      .closing p,
-      .quote p {
+      .closing p {
         margin: 0;
         color: var(--muted);
         line-height: 1.7;
         font-size: 1rem;
       }
-
-      .quote-wrap {
+      .section {
+        padding: 1.5rem 0;
+      }
+      .grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 1rem;
-        align-items: stretch;
       }
-
-      blockquote {
+      .quote {
+        margin-top: 1rem;
+        padding-left: 1rem;
+        border-left: 2px solid var(--line);
+      }
+      .quote p {
         margin: 0;
-        font-size: clamp(1.4rem, 2.4vw, 2rem);
-        line-height: 1.28;
-        letter-spacing: -0.02em;
+        font-size: 1.15rem;
+        line-height: 1.55;
+        color: var(--ink);
       }
-
-      .quote footer {
-        margin-top: 1rem;
-        color: var(--muted);
-        font-size: 0.95rem;
-      }
-
-      .closing {
-        margin-top: 1rem;
-        border-top: 1px solid var(--line);
-        display: flex;
-        justify-content: space-between;
-        align-items: end;
-        gap: 1rem;
-      }
-
-      .closing-copy {
-        max-width: 34rem;
-      }
-
       .small {
         margin-top: 0.9rem;
         color: var(--muted);
         font-size: 0.9rem;
       }
-
       @keyframes drift-in {
         from {
           opacity: 0;
@@ -259,38 +197,23 @@
           transform: translateY(0);
         }
       }
-
       @media (max-width: 900px) {
         .hero,
-        .quote-wrap,
         .grid {
           grid-template-columns: 1fr;
         }
-
-        .closing {
-          flex-direction: column;
-          align-items: start;
-        }
-
-        h1 {
-          max-width: 11ch;
-        }
       }
-
       @media (max-width: 640px) {
         .page {
           width: min(100% - 1.2rem, 1080px);
         }
-
         .topbar {
           align-items: flex-start;
           flex-direction: column;
         }
-
         .hero {
           padding-top: 3rem;
         }
-
         h1 {
           font-size: clamp(2.7rem, 14vw, 4.2rem);
         }
@@ -310,80 +233,85 @@
 
       <section class="hero" id="top">
         <div>
-          <div class="eyebrow">Anonymised session archive</div>
+          <div class="eyebrow">Open-source tooling for an anonymised archive</div>
           <h1>The Daily Claude</h1>
           <p class="lede">
-            The project is built from anonymised entries drawn from a few volunteer contributors. This public repo contains
-            <em>The Trawl</em>, the command-line tool that mines session logs for the moments worth keeping, plus the open-source
-            engineering work behind it.
+            This public repo contains <em>The Trawl</em>, the CLI behind The Daily Claude, plus the code, prompts, tests,
+            and docs around it. The wider project turns selected AI-session excerpts into short entries after review and anonymisation.
           </p>
+          <div class="quote">
+            <p>Session logs are easy to lose and hard to reread. The Trawl is a rough filter for finding material worth a second look, not a finished editorial system.</p>
+          </div>
           <div class="actions">
             <a class="button primary" href="https://github.com/The-Daily-Claude/the-daily-claude/tree/main/crates/trawl">View the Trawl</a>
             <a class="button secondary" href="https://github.com/The-Daily-Claude/the-daily-claude">Browse the repo</a>
           </div>
         </div>
 
-        <aside class="aside-card" aria-label="Summary">
-          <strong>What lives here</strong>
+        <aside class="panel" aria-label="Summary">
+          <h2>What this repo actually has</h2>
           <p>
-            Anonymised entry examples, The Trawl CLI, and the public engineering work behind the archive.
+            The public engineering work. Not a public archive of entries yet.
+          </p>
+          <p class="small">
+            The name comes from Alastair Reynolds' <em>Revelation Space</em>.
           </p>
         </aside>
       </section>
 
-      <section class="section" aria-label="Overview">
+      <section class="section" aria-label="Details">
         <div class="grid">
           <article class="note">
-            <h2>The Trawl</h2>
+            <h2>Privacy</h2>
             <p>
-              A CLI for reading Claude session transcripts and pulling out the failures, self-owns, accidental insights,
-              and other moments that survive a second reading.
+              We try to reduce risk by replacing or removing names, orgs, paths, credentials, and other identifying details before publication.
             </p>
           </article>
           <article class="note">
-            <h2>Name</h2>
+            <h2>Known limits</h2>
             <p>
-              The Trawl takes its name from Alastair Reynolds’ <em>Revelation Space</em>, where memory extraction is literal.
+              The project uses verbatim quotes, and much of the anonymisation still relies on LLM judgement plus review. That lowers risk, but it does not make publication risk-free.
             </p>
           </article>
           <article class="note">
-            <h2>In public</h2>
+            <h2>Current capabilities</h2>
             <p>
-              This repo is the open-source side of the project: code, docs, prompts, tests, and the CLI itself.
+              Today, The Trawl scans local Claude Code logs, surfaces candidate excerpts, tokenises flagged entities, and writes markdown drafts for review.
+            </p>
+          </article>
+          <article class="note">
+            <h2>Outside help</h2>
+            <p>
+              Help is most useful on privacy review, privacy hardening, future improvements, promotion, and general ideas and suggestions.
             </p>
           </article>
         </div>
       </section>
 
-      <section class="section" aria-label="Quote and context">
-        <div class="quote-wrap">
-          <article class="quote">
-            <h2>The premise</h2>
-            <blockquote>
-              “Failures, self-owns, small-scale catastrophes, weird-but-correct behaviour, accidental insights.”
-            </blockquote>
-            <footer>The working definition behind The Trawl’s extractor.</footer>
+      <section class="section" aria-label="Plans">
+        <div class="grid">
+          <article class="note">
+            <h2>Near-term goals</h2>
+            <p>
+              Improve extraction quality, make review and anonymisation more reliable, and support more distributed contribution and review.
+            </p>
           </article>
           <article class="note">
-            <h2>Why this exists</h2>
+            <h2>Later</h2>
             <p>
-              Most session logs are too long to revisit and too interesting to lose. The Trawl gives them a second pass without
-              pretending every transcript deserves a monument.
+              Make it easier for people to share entries with us intentionally, and eventually publish a public site with selected entries.
             </p>
           </article>
         </div>
       </section>
 
       <section class="closing" aria-label="Call to action">
-        <div class="closing-copy">
+        <div>
           <h2>Start with the repo.</h2>
           <p>
-            If you want the implementation, the docs, or the command-line surface, they’re all in one place and easy to inspect.
+            If you want to see how it works, the code, docs, prompts, and tests are all here.
           </p>
           <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ.</p>
-        </div>
-        <div class="actions">
-          <a class="button primary" href="https://github.com/The-Daily-Claude/the-daily-claude">Open GitHub</a>
         </div>
       </section>
     </main>
