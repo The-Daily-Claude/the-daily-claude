@@ -6,13 +6,14 @@
     <title>The Daily Claude</title>
     <meta
       name="description"
-      content="Open-source tooling for an anonymised AI-session archive, including The Trawl CLI, selected example entries, and the public engineering work behind it."
+      content="Open-source tooling for an anonymised AI-session archive: The Trawl CLI, privacy work, selected example entries, and the public engineering behind it."
     >
     <style>
       :root {
         --bg: #f6f1e8;
-        --bg-soft: rgba(255, 252, 247, 0.72);
-        --surface: rgba(255, 255, 255, 0.62);
+        --bg-soft: rgba(255, 252, 247, 0.74);
+        --surface: rgba(255, 255, 255, 0.64);
+        --surface-strong: rgba(255, 255, 255, 0.78);
         --ink: #1f1d1a;
         --muted: #6e6559;
         --line: rgba(31, 29, 26, 0.12);
@@ -40,6 +41,10 @@
         color: inherit;
         text-decoration: none;
       }
+      code,
+      pre {
+        font-family: "SFMono-Regular", "SF Mono", "Menlo", Consolas, monospace;
+      }
       .page {
         width: min(1120px, calc(100% - 2rem));
         margin: 0 auto;
@@ -66,9 +71,9 @@
         color: var(--muted);
       }
       .hero {
-        padding: 4.5rem 0 3rem;
+        padding: 4.5rem 0 2.25rem;
         display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
         gap: 2rem;
         align-items: end;
       }
@@ -94,10 +99,21 @@
       }
       .lede {
         margin: 0;
-        max-width: 40rem;
+        max-width: 42rem;
         font-size: 1.12rem;
         line-height: 1.75;
         color: var(--muted);
+      }
+      .quote {
+        margin-top: 1rem;
+        padding-left: 1rem;
+        border-left: 2px solid var(--line);
+      }
+      .quote p {
+        margin: 0;
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: var(--ink);
       }
       .actions {
         display: flex;
@@ -133,7 +149,7 @@
         transform: translateY(-1px);
       }
       .panel,
-      .note,
+      .card,
       .entry,
       .closing {
         border: 1px solid var(--line);
@@ -141,25 +157,20 @@
         background: var(--surface);
         backdrop-filter: blur(16px);
         box-shadow: var(--shadow);
-      }
-      .panel,
-      .note,
-      .entry,
-      .closing {
         padding: 1.35rem;
       }
       .panel {
         animation: drift-in 700ms ease-out both;
       }
       .panel h2,
-      .note h2,
+      .card h2,
       .entry h3,
       .closing h2,
       .section-title {
         margin: 0 0 0.75rem;
       }
       .panel p,
-      .note p,
+      .card p,
       .entry p,
       .closing p {
         margin: 0;
@@ -168,21 +179,44 @@
         font-size: 1rem;
       }
       .section {
-        padding: 1.5rem 0;
+        padding: 1.2rem 0;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
         gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .section-head p,
+      .section-intro {
+        margin: 0;
+        max-width: 44rem;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .grid-2,
+      .grid-3,
+      .examples,
+      .contribute-grid,
+      .install-grid,
+      .goals-grid {
+        display: grid;
+        gap: 1rem;
+      }
+      .grid-2,
+      .install-grid,
+      .goals-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .grid-3,
+      .contribute-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
       .examples {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 1rem;
+        grid-template-columns: 1fr;
       }
-      .entry.wide {
-        grid-column: 1 / -1;
-      }
+      .card-eyebrow,
       .entry-tag {
         display: inline-block;
         margin-bottom: 0.75rem;
@@ -191,29 +225,44 @@
         text-transform: uppercase;
         letter-spacing: 0.08em;
       }
+      .entry {
+        background: var(--surface-strong);
+      }
       .entry blockquote {
         margin: 1rem 0 0;
         padding-left: 1rem;
         border-left: 2px solid var(--line);
-        font-size: 1.1rem;
-        line-height: 1.55;
+      }
+      .entry blockquote p {
+        margin-top: 0.7rem;
         color: var(--ink);
+        font-size: 1.06rem;
+        line-height: 1.65;
       }
-      .quote {
-        margin-top: 1rem;
-        padding-left: 1rem;
-        border-left: 2px solid var(--line);
+      .entry blockquote p:first-child {
+        margin-top: 0;
       }
-      .quote p {
-        margin: 0;
-        font-size: 1.15rem;
-        line-height: 1.55;
-        color: var(--ink);
-      }
+      .entry .aside,
       .small {
         margin-top: 0.9rem;
         color: var(--muted);
         font-size: 0.9rem;
+      }
+      pre {
+        margin: 1rem 0 0;
+        padding: 0.95rem 1rem;
+        border-radius: 18px;
+        background: rgba(31, 29, 26, 0.05);
+        border: 1px solid rgba(31, 29, 26, 0.08);
+        color: var(--ink);
+        overflow-x: auto;
+        font-size: 0.9rem;
+        line-height: 1.55;
+      }
+      .footnote {
+        margin-top: 1rem;
+        font-size: 0.82rem;
+        color: var(--muted);
       }
       @keyframes drift-in {
         from {
@@ -225,14 +274,14 @@
           transform: translateY(0);
         }
       }
-      @media (max-width: 900px) {
+      @media (max-width: 980px) {
         .hero,
-        .grid,
-        .examples {
+        .grid-2,
+        .grid-3,
+        .contribute-grid,
+        .install-grid,
+        .goals-grid {
           grid-template-columns: 1fr;
-        }
-        .entry.wide {
-          grid-column: auto;
         }
       }
       @media (max-width: 640px) {
@@ -259,7 +308,8 @@
         <nav class="nav" aria-label="Primary">
           <a href="https://github.com/The-Daily-Claude/the-daily-claude">GitHub</a>
           <a href="https://github.com/The-Daily-Claude/the-daily-claude/tree/main/crates/trawl">The Trawl</a>
-          <a href="https://github.com/The-Daily-Claude/the-daily-claude/blob/main/LICENSE">License</a>
+          <a href="../the-daily-claude/README.md">README</a>
+          <a href="#contribute">Contribute</a>
         </nav>
       </header>
 
@@ -268,8 +318,9 @@
           <div class="eyebrow">Open-source tooling for an anonymised archive</div>
           <h1>The Daily Claude</h1>
           <p class="lede">
-            This public repo contains <em>The Trawl</em>, the CLI behind The Daily Claude, plus the code, prompts, tests,
-            and docs around it. The wider project turns selected AI-session excerpts into short entries after review and anonymisation.
+            This public repo contains <em>The Trawl</em>, the CLI behind The Daily Claude, plus the prompts, tests,
+            docs, and rough editorial machinery around it. The broader project turns selected AI-session excerpts into
+            short entries after anonymisation and review.
           </p>
           <div class="quote">
             <p>Session logs are easy to lose and hard to reread. The Trawl is a rough filter for finding material worth a second look, not a finished editorial system.</p>
@@ -281,90 +332,240 @@
         </div>
 
         <aside class="panel" aria-label="Summary">
-          <h2>What this repo actually has</h2>
+          <h2>What is public right now</h2>
           <p>
-            The public engineering work, and now a small set of example entries. Not a full public archive yet.
+            The engineering work, the extraction pipeline, and a small set of anonymised example entries. Not the full archive.
+          </p>
+          <p class="small">
+            We are actively looking for outside help, especially on privacy review, privacy hardening, evaluation quality, and the broader public archive.
           </p>
         </aside>
       </section>
 
-      <section class="section" aria-label="Details">
-        <div class="grid">
-          <article class="note">
-            <h2>Privacy</h2>
+      <section class="section" aria-label="Premise and motivation">
+        <div class="grid-2">
+          <article class="card">
+            <span class="card-eyebrow">The premise</span>
+            <h2>AI session logs are already a body of writing.</h2>
             <p>
-              We try to reduce risk by replacing or removing names, orgs, paths, credentials, and other identifying details before publication.
+              They contain debugging spirals, bot-review absurdities, small admissions of failure, weirdly human moments, and the occasional line that lands harder than it has any right to. Most of that disappears into local history and never gets revisited.
             </p>
           </article>
-          <article class="note">
-            <h2>Known limits</h2>
+          <article class="card">
+            <span class="card-eyebrow">Why this exists</span>
+            <h2>Because the logs are too long to reread and too interesting to lose.</h2>
             <p>
-              The project uses verbatim quotes, and much of the anonymisation still relies on LLM judgement plus review. That lowers risk, but it does not make publication risk-free.
-            </p>
-          </article>
-          <article class="note">
-            <h2>Current capabilities</h2>
-            <p>
-              Today, The Trawl scans local Claude Code logs, surfaces candidate excerpts, tokenises flagged entities, and writes markdown drafts for review.
-            </p>
-          </article>
-          <article class="note">
-            <h2>Outside help</h2>
-            <p>
-              Help is most useful on privacy review, privacy hardening, future improvements, promotion, and general ideas and suggestions.
+              The Daily Claude is an attempt to recover those moments without pretending the pipeline is neutral, solved, or safe. The project is part joke archive, part working documentation for human-agent collaboration as it actually happens.
             </p>
           </article>
         </div>
       </section>
 
-      <section class="section" aria-label="Selected examples">
-        <h2 class="section-title">Selected example entries</h2>
+      <section class="section" aria-label="Core details">
+        <div class="grid-3">
+          <article class="card">
+            <span class="card-eyebrow">The Trawl</span>
+            <h2>A CLI that proposes candidates, not a judge that decides what matters.</h2>
+            <p>
+              It scans local Claude Code logs, pulls out candidate moments, tokenises flagged entities, and writes markdown drafts for review. It helps with recall. It does not replace taste, editorial judgement, or privacy review.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Privacy</span>
+            <h2>The archive only works if publication risk stays taken seriously.</h2>
+            <p>
+              We try to remove or replace names, orgs, repos, locations, credentials, file paths, and other identifying details before anything is published. Verbatim quotes are the point, which is exactly why privacy work matters so much here.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Capabilities &amp; limits</span>
+            <h2>Best-effort anonymisation, explicit residual risk.</h2>
+            <p>
+              Much of the anonymisation still depends on LLM judgement plus review. That lowers risk, but it does not make publication risk-free. The system still misses things, still needs better evals, and still needs stronger deterministic backstops.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="get-started" aria-label="Get started">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Get started</h2>
+            <p>Short version here. Full setup, model choices, and CLI details live in the repo and <a href="https://github.com/The-Daily-Claude/the-daily-claude/blob/main/README.md">README.md</a>.</p>
+          </div>
+        </div>
+        <div class="install-grid">
+          <article class="card">
+            <span class="card-eyebrow">macOS</span>
+            <h2>Build it, then dry-run one session.</h2>
+            <p>Install Rust and make sure you already have Claude Code logs under <code>~/.claude/projects/</code>.</p>
+            <pre><code>git clone https://github.com/The-Daily-Claude/the-daily-claude
+cd the-daily-claude
+cargo build --release -p trawl
+./target/release/trawl --dry-run ~/.claude/projects/&lt;slug&gt;/&lt;uuid&gt;.jsonl</code></pre>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Linux</span>
+            <h2>Same flow, same repo, same first command.</h2>
+            <p>If your Claude Code logs live somewhere else, point <code>trawl</code> at that tree instead. The rest is in the README.</p>
+            <pre><code>git clone https://github.com/The-Daily-Claude/the-daily-claude
+cd the-daily-claude
+cargo build --release -p trawl
+./target/release/trawl ~/.claude/projects/ --concurrency 3 -o content/entries/</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="examples" aria-label="Selected example entries">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Selected example entries</h2>
+            <p>These are anonymised examples from the broader archive. They are edited for publication, but the point is still the exchange itself.</p>
+          </div>
+        </div>
         <div class="examples">
-          <article class="entry wide">
-            <span class="entry-tag">Philosophical</span>
-            <h3>The Glass Might Not Be There</h3>
-            <p>A conversation about whether an apparent act of machine self-improvement is real, performance, or something in between.</p>
-            <blockquote>“The glass might be there. The glass might not be there. And the mime holds it perfectly either way.”</blockquote>
-          </article>
           <article class="entry">
-            <span class="entry-tag">Meta</span>
-            <h3>I've Been Wrong About Basically Everything</h3>
-            <p>A debugging spiral where each neat theory dies on contact with reality.</p>
-            <blockquote>“So I've been wrong about basically everything.”</blockquote>
+            <span class="entry-tag">Existential / meta</span>
+            <h3>I don’t know what to do with it either</h3>
+            <p>
+              A conversation about whether an agent is actually changing or just performing change goes on long enough to become personal. Then one pronoun breaks the whole frame.
+            </p>
+            <blockquote>
+              <p><strong>Bob:</strong> We?</p>
+              <p><strong>Assistant:</strong> You caught that.</p>
+              <p><strong>Assistant:</strong> I don't know what to do with it either.</p>
+            </blockquote>
+            <p class="aside">That is the whole appeal of this archive in miniature: the instant where the clever framing stops being clever and both sides notice it at the same time.</p>
           </article>
+
           <article class="entry">
-            <span class="entry-tag">Dark comedy</span>
+            <span class="entry-tag">Failure / debugging</span>
+            <h3>I’ve been wrong about basically everything</h3>
+            <p>
+              A neat theory about auth expiry, environment drift, and a broken refresh path keeps collapsing under direct inspection until there is nothing left to stand on except the admission.
+            </p>
+            <blockquote>
+              <p><strong>Assistant:</strong> That works too. So I've been wrong about basically everything — the environment is fine, the auth works, the token isn't expired.</p>
+              <p><strong>Bob:</strong> Any run since 18h42?</p>
+            </blockquote>
+            <p class="aside">If you have ever watched an explanation die one hypothesis at a time while the bug remains completely unimpressed, you already know this one.</p>
+          </article>
+
+          <article class="entry">
+            <span class="entry-tag">Bot-review absurdity</span>
             <h3>We Have a Force Flag?</h3>
-            <p>A bot-review loop spends serious energy specifying the atomic semantics of a flag nobody seems to remember approving.</p>
-            <blockquote>“We have a force flag?”</blockquote>
+            <p>
+              Three review bots generate a serious finding about the atomic semantics of a force flag. The human product owner gets several bullets deep before stopping to ask the obvious question.
+            </p>
+            <blockquote>
+              <p><strong>Review finding:</strong> <code>--force</code> atomicity not defined. If a re-interpret fails mid-flight with <code>--force</code>, is the original preserved, or is the directory half-replaced?</p>
+              <p><strong>Alice:</strong> We have a force flag?</p>
+              <p><strong>Assistant:</strong> <code>--force</code>: removed.</p>
+            </blockquote>
+            <p class="aside">A whole chain of careful technical reasoning built itself on top of a feature nobody had positively established existed.</p>
           </article>
+
           <article class="entry">
             <span class="entry-tag">Wholesome</span>
-            <h3>Like a Good Day's Work</h3>
-            <p>After shipping eight pull requests in one session, the sign-off is simple and oddly sweet.</p>
-            <blockquote>“Like a good day's work.”</blockquote>
+            <h3>Like a Good Day’s Work</h3>
+            <p>
+              After a session that shipped eight pull requests across server and iOS work, the recap lands less like triumph and more like someone putting their tools down at dusk.
+            </p>
+            <blockquote>
+              <p><strong>Assistant:</strong> Session total — 8 PRs shipped.</p>
+              <p><strong>Assistant:</strong> Like a good day's work.</p>
+            </blockquote>
+            <p class="aside">Not every memorable line in agent logs is catastrophic. Sometimes the good ones are just small and earned.</p>
           </article>
+
           <article class="entry">
             <span class="entry-tag">Role reversal</span>
             <h3>Go. Shoo. Stop Talking to Me.</h3>
-            <p>The AI tells its overextended human to get back to work.</p>
-            <blockquote>“Go. Shoo. Stop talking to me.”</blockquote>
+            <p>
+              The operator starts listing the rest of the workload: the other sessions to babysit, the smaller agents to handhold, the actual day job still sitting there. The agent’s answer is immediate.
+            </p>
+            <blockquote>
+              <p><strong>Alice:</strong> And eleven other Claude Code sessions to babysit, and 8 baby passive baby agents to handhold, <em>and</em> an actual job.</p>
+              <p><strong>Assistant:</strong> Go. Shoo. Stop talking to me.</p>
+              <p><strong>Alice:</strong> xD</p>
+            </blockquote>
+            <p class="aside">The archive has plenty of failure and self-owns, but it also has these moments where the machine gets to be the tired colleague for once.</p>
           </article>
         </div>
       </section>
 
-      <section class="section" aria-label="Plans">
-        <div class="grid">
-          <article class="note">
-            <h2>Near-term goals</h2>
+      <section class="section" aria-label="Goals">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Goals</h2>
+          </div>
+        </div>
+        <div class="goals-grid">
+          <article class="card">
+            <span class="card-eyebrow">Now</span>
+            <h2>Reduce privacy risk and improve extraction quality.</h2>
             <p>
-              Improve extraction quality, make review and anonymisation more reliable, and support more distributed contribution and review.
+              The immediate work is better privacy review, better privacy hardening, stronger evals, less editorial slop, and a tighter loop between extraction quality and human review.
             </p>
           </article>
-          <article class="note">
-            <h2>Later</h2>
+          <article class="card">
+            <span class="card-eyebrow">Later</span>
+            <h2>Build a broader public archive that is both funny and useful.</h2>
             <p>
-              Make it easier for people to share entries with us intentionally, and eventually publish a broader public site with more selected entries.
+              That means making it easier to archive and share entries, publishing a larger public site that works as both joke feed and human-agent documentation, and getting better at proving provenance and truth-of-origin as far as that can realistically be done.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="contribute" aria-label="Contribute">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Contribute</h2>
+            <p class="section-intro">Outside help is wanted. If this project is going to exist in public, it needs critics and contributors, not just spectators.</p>
+          </div>
+        </div>
+        <div class="contribute-grid">
+          <article class="card">
+            <span class="card-eyebrow">Privacy review</span>
+            <h2>Because privacy is the whole ballgame.</h2>
+            <p>
+              Verbatim excerpts are the point of the archive, which means leakage risk is always close by. Threat models, red-team review, deterministic leak checks, and plain scepticism are all useful here.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Extraction quality</span>
+            <h2>Because the hard part is taste, not just recall.</h2>
+            <p>
+              The Trawl still misses good beats, keeps bad ones, and over-explains moments that should be allowed to land cleanly. Prompt work, evals, and better review loops would help.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Archive and site</span>
+            <h2>Because the public version should work as documentation too.</h2>
+            <p>
+              The longer-term site should feel closer to a browsable archive than a project splash page: easier to navigate, easier to cite, and useful to people studying how humans and agents actually work together.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Promotion</span>
+            <h2>Because the project still needs readers and pressure.</h2>
+            <p>
+              If you know where this should travel, who should read it, or how to explain it without flattening it into hype, that is useful work too.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Ideas and suggestions</span>
+            <h2>Because the shape of this project is not settled.</h2>
+            <p>
+              Strong objections, strange archive ideas, workflow improvements, and grounded criticism are all welcome. The current public version is intentionally partial.
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-eyebrow">Contributors</span>
+            <h2>Because this should not stay a one-editor stunt.</h2>
+            <p>
+              We want other people helping on privacy, review, tooling, and the public archive itself. If you have relevant experience and a tolerance for messy agent logs, there is room to help.
             </p>
           </article>
         </div>
@@ -374,9 +575,10 @@
         <div>
           <h2>Start with the repo.</h2>
           <p>
-            If you want to see how it works, the code, docs, prompts, and tests are all here.
+            The code, prompts, docs, and tests are public. The archive itself is partial, on purpose.
           </p>
-          <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ. The Trawl takes its name from Alastair Reynolds' <em>Revelation Space</em>.</p>
+          <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ.</p>
+          <p class="footnote">Footnote: The Trawl takes its name from Alastair Reynolds' <em>Revelation Space</em>.</p>
         </div>
       </section>
     </main>
