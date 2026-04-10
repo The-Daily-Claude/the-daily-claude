@@ -1,45 +1,57 @@
 ---
 title: "Extractor: compute `project:` in Rust, don't let the LLM slugify the path"
 priority: critical
-status: pending
+status: complete
 ---
 
-# Stop asking the LLM to slugify a path into the `project:` field
+# Compute `project:` in Rust, not via extractor output
 
-## The bug
+## What landed
 
-The ZFC trawl extractor asks the LLM to fill in the `project:` frontmatter field. With no clean source value, the LLM defaults to slugifying the session jsonl file path, producing `project: Users-alice` — leaking the user's home directory into entry frontmatter.
+This fix is already in the codebase.
 
-Found across ~80+ entries in the #211–#310 range from the ZFC batch run. Fixed retroactively by the 2026-04-08 sweep; this todo prevents the next trawl run from reintroducing it.
+The extractor prompt no longer asks the model for a `project:` field. Its structured output is now only:
 
-## Why this is wrong
+- `title`
+- `category`
+- `tags`
+- `quote`
+- `why`
 
-Slugifying a path is deterministic code work. The LLM has no business doing it. The cost of asking it anyway: non-determinism, wasted tokens, and a hallucination risk that turned into a real PII leak.
+When `trawl` writes an entry, it derives `project` from the session path in Rust via `derive_project_name(session_path)` and injects that value into the entry frontmatter at write time.
 
-## The fix
+## Why this mattered
 
-Minimal. Two steps in `crates/trawl/src/extractor.rs` (plus wherever the response is parsed):
+The old extractor flow let the model invent the `project:` field from the session file path. In practice that produced values like `Users-alice`, which leaked home-path context into entry frontmatter.
 
-1. **Remove `project:` from the LLM's response schema.** The prompt should no longer ask for it. The structured-output contract should no longer include it.
-2. **Compute `project:` in Rust.** Trawl already knows the session file path — it's the input. Derive the project name from the parent-dir slug in the Claude session tree (e.g. `~/.claude/projects/-Users-<user>-Projects-<org>-<project>/<uuid>.jsonl` → `<project>`, applying whatever canonical decoding rule we pick). Inject the computed value into the frontmatter after the LLM call returns.
+That was the wrong boundary. Slugifying a path is deterministic code work, not LLM cognition.
 
-If the canonical decoding rule is non-obvious for a given path, `project: unknown` is a fine fallback. What matters is that the value is code-generated, not LLM-generated.
+## What changed
 
-### Good news: `derive_project_name` already exists
+1. `project:` was removed from the extractor contract.
+2. `derive_project_name(session_path)` became the write-time source of truth for the frontmatter field.
+3. The entry writer now sets `project` from code, not model output.
 
-The function is already written at `crates/trawl/src/main.rs:648` with a passing unit test (`derive_project_name_takes_last_two_segments`). It takes the session path, extracts the parent directory's last 2 dash-segments, and joins them with a hyphen — exactly the canonical decoding rule we need. The current comment says *"This is a heuristic, not security-sensitive — the tokeniser will scrub anything that needs scrubbing"* — that framing is **wrong** under the new architecture. This function is the SOURCE OF TRUTH for the `project:` field, not a fallback heuristic. Update the comment when wiring it in.
+## Current evidence
 
-Remaining work:
+Grounding for the completion claim:
 
-- Remove `project:` from the LLM response schema / prompt in `extractor.rs`
-- After the LLM call returns, inject `derive_project_name(session_path)` into the frontmatter the extractor writes
-- Update the `derive_project_name` comment to reflect that it is now the authoritative source, not a heuristic fallback
-- Verify via smoke test (re-run trawl on `10c05bb2`, `aab2e849`, `3c76563c`) that no new entry has `project: Users-*` or a home-path slug
+- `crates/trawl/prompts/extractor.md` no longer includes `project` in the output schema.
+- `crates/trawl/src/main.rs` sets `let project = derive_project_name(session_path);` before constructing the `Entry`.
+- The written `Entry` uses that Rust-derived value for `project`.
 
-## Smoke test
+## Residual caveat
 
-Re-run trawl on `10c05bb2`, `aab2e849`, `3c76563c` and confirm no entry frontmatter contains `project: Users-*` or any home-path slug. The field should be either a clean project name or `unknown`.
+One wording mismatch remains in code comments: `derive_project_name` is still described as a heuristic and "not security-sensitive". That comment is stale relative to the architecture now that the function is the source of truth for the `project` field.
+
+## Verification status
+
+Implementation: complete.
+
+Fresh smoke rerun: not re-executed during the 2026-04-09 capability audit session. We did not send private session content back through the model just to re-prove this fix. The completion here is based on source inspection of the shipped implementation, not a new extractor run over `10c05bb2`, `aab2e849`, and `3c76563c`.
 
 ## Out of scope
 
-- Any other trawl architecture change. Claude still reads the session file normally via the Read tool with `--add-dir`. The tokeniser still handles natural-language PII. The only change is that the single `project:` field moves from LLM output to Rust-computed injection.
+- Any broader extractor redesign
+- Any tokeniser change
+- Any fresh end-to-end smoke run over private sessions

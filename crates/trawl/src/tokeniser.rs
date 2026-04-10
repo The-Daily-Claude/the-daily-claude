@@ -1,4 +1,4 @@
-//! Stage 2: Haiku tokeniser.
+//! Stage 2: tokeniser.
 //!
 //! Replaces every PII span in a draft entry with `#TYPE_NNN#` placeholders
 //! and emits a sidecar entity graph describing the relationships between
@@ -13,11 +13,10 @@
 //! would if only the quote were tokenised.
 
 use crate::extractor::{DraftEntry, find_matching_bracket};
+use crate::llm::StageConfig;
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 const TOKENISER_PROMPT: &str = include_str!("../prompts/tokeniser.md");
 
@@ -53,7 +52,7 @@ pub struct TokenisedEntry {
 /// through the same tokeniser call so placeholder ids stay consistent
 /// across fields — a single person mentioned in both title and body
 /// becomes the same `#USER_001#`.
-pub fn tokenise_entry(draft: &DraftEntry, model: &str) -> Result<TokenisedEntry> {
+pub fn tokenise_entry(draft: &DraftEntry, stage: &StageConfig) -> Result<TokenisedEntry> {
     let draft_json = serde_json::to_string_pretty(&DraftPayload {
         title: &draft.title,
         category: &draft.category,
@@ -62,17 +61,16 @@ pub fn tokenise_entry(draft: &DraftEntry, model: &str) -> Result<TokenisedEntry>
     })
     .context("serialise draft for tokeniser")?;
 
-    let prompt = format!(
-        "{TOKENISER_PROMPT}\n\n## Draft to tokenise\n\n```json\n{draft_json}\n```"
-    );
+    let prompt =
+        format!("{TOKENISER_PROMPT}\n\n## Draft to tokenise\n\n```json\n{draft_json}\n```");
 
-    let raw = run_claude(model, &prompt)?;
+    let raw = stage.run_tokeniser(&prompt)?;
     match parse_tokenised(&raw) {
         Ok(t) => Ok(t),
         Err(_) => {
             let retry_prompt =
                 format!("{prompt}\n\nReturn ONLY the JSON object. No prose, no markdown fencing.");
-            let retry = run_claude(model, &retry_prompt)?;
+            let retry = stage.run_tokeniser(&retry_prompt)?;
             parse_tokenised(&retry).context("tokeniser returned invalid JSON after retry")
         }
     }
@@ -86,44 +84,6 @@ struct DraftPayload<'a> {
     category: &'a str,
     tags: &'a [String],
     quote: &'a str,
-}
-
-/// Spawn `claude -p --model <model>` with the prompt piped to stdin.
-/// The tokeniser stage doesn't need any tools — it just transforms
-/// text. We omit `--allowedTools` entirely rather than passing it empty
-/// so the CLI parser never has to interpret an empty variadic value.
-fn run_claude(model: &str, prompt: &str) -> Result<String> {
-    let mut child = Command::new("claude")
-        .arg("-p")
-        .arg("--model")
-        .arg(model)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("failed to spawn `claude` for tokeniser")?;
-
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| anyhow!("failed to open stdin to claude tokeniser"))?;
-        stdin
-            .write_all(prompt.as_bytes())
-            .context("failed to write tokeniser prompt to stdin")?;
-    }
-
-    let output = child.wait_with_output().context("waiting on claude tokeniser")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!(
-            "claude exited with status {:?}: {stderr}",
-            output.status.code()
-        ));
-    }
-
-    String::from_utf8(output.stdout).context("claude stdout was not valid UTF-8")
 }
 
 /// Robust JSON-object extractor — find the first `{` and the matching
@@ -209,7 +169,10 @@ mod tests {
         }"#;
         let t = parse_tokenised(raw).unwrap();
         assert!(t.needs_review);
-        assert_eq!(t.review_reason.as_deref(), Some("saw a token-shaped string"));
+        assert_eq!(
+            t.review_reason.as_deref(),
+            Some("saw a token-shaped string")
+        );
     }
 
     #[test]

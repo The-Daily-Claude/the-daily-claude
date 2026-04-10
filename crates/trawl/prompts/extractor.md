@@ -34,8 +34,9 @@ Claude post. A good moment is:
 - **Anchored in verbatim text.** Every quoted line must exist, byte-for-byte,
   somewhere in the session — human message, assistant message, thinking
   block, or the *arguments* to a tool call (e.g. the content Claude wrote
-  into a file). Never quote tool output, build logs, diffs, or stack traces
-  as if they were speech.
+  into a file). Tool output may appear only as brief supporting context,
+  never as the dominant "speaker" of the moment. Never quote build logs,
+  diffs, or stack traces as if they were speech.
 
 Solo-Claude monologues are valid **if** the assistant tells a complete
 story on its own — a confession, a realisation, an unhinged plan, a
@@ -57,7 +58,10 @@ in Claude's private reasoning where the meta-joke sits.
 
 Tool *inputs* (what Claude wrote, edited, or committed) count as quotable
 because they are things Claude published into the world. Tool *results*
-(exit codes, file listings, compiler errors) do not.
+(exit codes, file listings, compiler errors) may be quoted only when they
+are short, load-bearing setup or punchline support for a stronger human /
+assistant / thinking beat around them. They are supporting context, not
+the star of the entry.
 
 ### What is NOT a moment
 
@@ -133,10 +137,14 @@ fields:
 
 ### Quote formatting
 
-- Use `[HUMAN]:`, `[ASSISTANT]:`, `[THINKING]:`, and
-  `[TOOL_INPUT:<name>]:` as role labels, one per block, separated by
-  blank lines. Tool *results* are never quoted (see the exclusion rule
-  above) and therefore have no role label.
+- Use `[HUMAN]:`, `[ASSISTANT]:`, `[THINKING]:`,
+  `[TOOL_INPUT:<name>]:`, and when necessary
+  `[TOOL_RESULT:<name>]:` as role labels, one per block, separated by
+  blank lines.
+- `[TOOL_RESULT:<name>]:` blocks are allowed only as brief supporting
+  context. Keep them tight, quote only the minimum span needed for the
+  joke to land, and do not let them dominate the moment. If the funny
+  part is only the raw tool output, drop the moment.
 - Quote **verbatim**. No paraphrase. No summarisation. No truncation of
   the punchline. Ellipses `...` are only acceptable to elide a long
   middle section that is neither setup nor punchline.

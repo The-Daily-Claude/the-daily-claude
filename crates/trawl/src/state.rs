@@ -1,17 +1,20 @@
 //! Incremental state file (`content/.trawl-state.json`).
 //!
 //! Records what was already trawled so unchanged sessions are skipped on
-//! rerun. The decision to skip is the conjunction of three hashes plus a
-//! version gate:
+//! rerun. The decision to skip is the conjunction of the file hash, both
+//! prompt hashes, both backend signatures, and a version gate:
 //!
 //! - `file_sha256`: did the session jsonl change?
 //! - `extractor_prompt_sha256`: did the extractor prompt change?
 //! - `tokeniser_prompt_sha256`: did the tokeniser prompt change?
+//! - `extractor_backend_signature`: did the extractor provider/model/effort change?
+//! - `tokeniser_backend_signature`: did the tokeniser provider/model/effort change?
 //! - `trawl_version`: did the binary itself bump in a way that
 //!   invalidates prior runs?
 //!
 //! Any mismatch → re-trawl from scratch. No append-mode in v1; we trust
-//! Sonnet to be deterministic enough for full rerun to be cheap.
+//! the selected model backend to be deterministic enough for full rerun
+//! to be cheap.
 
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -96,11 +99,7 @@ fn sidecar_tmp_path(final_path: &Path) -> Result<PathBuf> {
     };
 
     let nonce = TMPFILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let tmp_name = format!(
-        ".{}.tmp.{}.{nonce}",
-        truncated,
-        std::process::id()
-    );
+    let tmp_name = format!(".{}.tmp.{}.{nonce}", truncated, std::process::id());
     Ok(parent.join(tmp_name))
 }
 
@@ -137,13 +136,8 @@ pub fn atomic_write(final_path: &Path, contents: &[u8]) -> Result<()> {
     fs::write(&tmp_path, contents)
         .with_context(|| format!("write tempfile {}", tmp_path.display()))?;
 
-    fs::rename(&tmp_path, final_path).with_context(|| {
-        format!(
-            "rename {} -> {}",
-            tmp_path.display(),
-            final_path.display()
-        )
-    })?;
+    fs::rename(&tmp_path, final_path)
+        .with_context(|| format!("rename {} -> {}", tmp_path.display(), final_path.display()))?;
     Ok(())
 }
 
@@ -178,13 +172,8 @@ pub fn atomic_write_exclusive(final_path: &Path, contents: &[u8]) -> Result<bool
     match fs::hard_link(&tmp_path, final_path) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(false),
-        Err(e) => Err(e).with_context(|| {
-            format!(
-                "link {} -> {}",
-                tmp_path.display(),
-                final_path.display()
-            )
-        }),
+        Err(e) => Err(e)
+            .with_context(|| format!("link {} -> {}", tmp_path.display(), final_path.display())),
     }
 }
 
@@ -198,6 +187,10 @@ pub struct SessionRecord {
     pub mtime: String,
     pub extractor_prompt_sha256: String,
     pub tokeniser_prompt_sha256: String,
+    #[serde(default)]
+    pub extractor_backend_signature: String,
+    #[serde(default)]
+    pub tokeniser_backend_signature: String,
     pub trawl_version: String,
     /// Entry filenames (e.g. `312-per-your-own-rule.md`) produced by the
     /// last successful run on this session — useful for cleanup if the
@@ -241,6 +234,8 @@ impl State {
         current_file_sha: &str,
         extractor_sha: &str,
         tokeniser_sha: &str,
+        extractor_backend_signature: &str,
+        tokeniser_backend_signature: &str,
     ) -> bool {
         let Some(rec) = self.sessions.get(&session_key(session_path)) else {
             return false;
@@ -248,6 +243,8 @@ impl State {
         rec.file_sha256 == current_file_sha
             && rec.extractor_prompt_sha256 == extractor_sha
             && rec.tokeniser_prompt_sha256 == tokeniser_sha
+            && rec.extractor_backend_signature == extractor_backend_signature
+            && rec.tokeniser_backend_signature == tokeniser_backend_signature
             && rec.trawl_version == CRATE_VERSION
     }
 
@@ -341,16 +338,14 @@ pub fn sha256_file(path: &Path) -> Result<String> {
 struct Sha256;
 
 const SHA256_K: [u32; 64] = [
-    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-    0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-    0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-    0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-    0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-    0xc67178f2,
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
 impl Sha256 {
@@ -467,10 +462,8 @@ mod tests {
     use super::*;
 
     fn tmp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "trawl-state-test-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("trawl-state-test-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -522,6 +515,8 @@ mod tests {
                 mtime: "2026-04-07T22:00:00Z".to_string(),
                 extractor_prompt_sha256: "ext".to_string(),
                 tokeniser_prompt_sha256: "tok".to_string(),
+                extractor_backend_signature: "claude-code/sonnet".to_string(),
+                tokeniser_backend_signature: "claude-code/haiku".to_string(),
                 trawl_version: CRATE_VERSION.to_string(),
                 extracted_entry_files: vec!["312-per-your-own-rule.md".to_string()],
             },
@@ -544,22 +539,88 @@ mod tests {
                 mtime: "now".to_string(),
                 extractor_prompt_sha256: "e".to_string(),
                 tokeniser_prompt_sha256: "t".to_string(),
+                extractor_backend_signature: "claude-code/sonnet".to_string(),
+                tokeniser_backend_signature: "claude-code/haiku".to_string(),
                 trawl_version: CRATE_VERSION.to_string(),
                 extracted_entry_files: vec![],
             },
         );
 
-        assert!(s.is_fresh(&p, "f", "e", "t"));
-        assert!(!s.is_fresh(&p, "different", "e", "t"));
-        assert!(!s.is_fresh(&p, "f", "different", "t"));
-        assert!(!s.is_fresh(&p, "f", "e", "different"));
+        assert!(s.is_fresh(&p, "f", "e", "t", "claude-code/sonnet", "claude-code/haiku"));
+        assert!(!s.is_fresh(
+            &p,
+            "different",
+            "e",
+            "t",
+            "claude-code/sonnet",
+            "claude-code/haiku"
+        ));
+        assert!(!s.is_fresh(
+            &p,
+            "f",
+            "different",
+            "t",
+            "claude-code/sonnet",
+            "claude-code/haiku"
+        ));
+        assert!(!s.is_fresh(
+            &p,
+            "f",
+            "e",
+            "different",
+            "claude-code/sonnet",
+            "claude-code/haiku"
+        ));
+        assert!(!s.is_fresh(
+            &p,
+            "f",
+            "e",
+            "t",
+            "codex/gpt-5.4-codex",
+            "claude-code/haiku"
+        ));
     }
 
     #[test]
     fn fresh_returns_false_for_unknown_session() {
         let s = State::default();
         let p = PathBuf::from("/never/seen.jsonl");
-        assert!(!s.is_fresh(&p, "any", "any", "any"));
+        assert!(!s.is_fresh(
+            &p,
+            "any",
+            "any",
+            "any",
+            "claude-code/sonnet",
+            "claude-code/haiku"
+        ));
+    }
+
+    #[test]
+    fn legacy_state_without_backend_signatures_still_loads() {
+        let dir = tmp_dir("legacy-state");
+        let path = dir.join("state.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "sessions": {
+    "/tmp/demo.jsonl": {
+      "file_sha256": "f",
+      "size_bytes": 1,
+      "mtime": "now",
+      "extractor_prompt_sha256": "e",
+      "tokeniser_prompt_sha256": "t",
+      "trawl_version": "0.1.0",
+      "extracted_entry_files": []
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let loaded = State::load(&path).unwrap();
+        let rec = loaded.sessions.get("/tmp/demo.jsonl").unwrap();
+        assert_eq!(rec.extractor_backend_signature, "");
+        assert_eq!(rec.tokeniser_backend_signature, "");
     }
 
     #[test]
@@ -797,7 +858,10 @@ mod tests {
         // and the naive sidecar would be ~272 bytes.
         let dir = tmp_dir("aw-near-namemax");
         let long_name = format!("{}.md", "z".repeat(237));
-        assert!(long_name.len() < 255, "test fixture must be a legal filename");
+        assert!(
+            long_name.len() < 255,
+            "test fixture must be a legal filename"
+        );
         let target = dir.join(&long_name);
         atomic_write(&target, b"hello").unwrap();
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "hello");
@@ -905,6 +969,8 @@ mod tests {
                 mtime: "now".into(),
                 extractor_prompt_sha256: "e".into(),
                 tokeniser_prompt_sha256: "t".into(),
+                extractor_backend_signature: "claude-code/sonnet".into(),
+                tokeniser_backend_signature: "claude-code/haiku".into(),
                 trawl_version: CRATE_VERSION.into(),
                 extracted_entry_files: vec![],
             },

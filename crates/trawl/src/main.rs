@@ -12,8 +12,8 @@
 //! 8-dim scoring rubric, no overlap dedup. The model is the framework.
 //!
 //! Persistence: a state file (`content/.trawl-state.json`) hashes
-//! file content + both prompts + crate version to decide whether a
-//! session has already been trawled. A PII registry
+//! file content + both prompts + both backend signatures + crate
+//! version to decide whether a session has already been trawled. A PII registry
 //! (`content/.pii-registry.json`) records SHA-256 digests of literal
 //! PII the tokeniser has flagged across all runs and validates every
 //! new draft against the cumulative knowledge.
@@ -24,21 +24,24 @@ use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::mpsc;
+use trawl::llm::StageConfig;
 use uuid::Uuid;
 
 use trawl::entry::{Entry, Source};
 use trawl::extractor;
 use trawl::registry::{self, Registry};
-use trawl::state::{
-    self, SessionRecord, State, atomic_write_exclusive, sha256_file, sha256_hex,
-};
+use trawl::state::{self, SessionRecord, State, atomic_write_exclusive, sha256_file, sha256_hex};
 use trawl::tokeniser::{self, TokenisedEntry};
 
 const EXTRACTOR_PROMPT: &str = include_str!("../prompts/extractor.md");
 const TOKENISER_PROMPT: &str = include_str!("../prompts/tokeniser.md");
 
 #[derive(Parser)]
-#[command(name = "trawl", version, about = "ZFC session miner for The Daily Claude")]
+#[command(
+    name = "trawl",
+    version,
+    about = "ZFC session miner for The Daily Claude"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -56,13 +59,52 @@ struct Cli {
     #[arg(long, default_value = "content")]
     content_root: PathBuf,
 
-    /// Sonnet model ID for the extractor stage.
-    #[arg(long, default_value = "sonnet")]
+    /// Extractor model in `provider/model` form.
+    ///
+    /// Examples:
+    /// - `claude-code/claude-opus-4-6`
+    /// - `codex/gpt-5.4-codex`
+    /// - `gemini/gemini-3.1-pro-preview`
+    /// - `opencode/kimi-for-coding/k2p5`
+    /// - `pi/zai-coding-plan/glm-5.1`
+    ///
+    /// Bare names like `sonnet` are still accepted and treated as
+    /// `claude-code/sonnet`.
+    #[arg(long, default_value = "claude-code/sonnet", verbatim_doc_comment)]
     extractor_model: String,
 
-    /// Haiku model ID for the tokeniser stage.
-    #[arg(long, default_value = "haiku")]
+    /// Tokeniser model in `provider/model` form.
+    ///
+    /// Examples:
+    /// - `claude-code/claude-sonnet-4-6`
+    /// - `codex/gpt-5.4-codex`
+    /// - `gemini/gemini-2.5-flash`
+    /// - `opencode/minimax-coding-plan/MiniMax-M2.7`
+    /// - `pi/zai-coding-plan/glm-5.1`
+    ///
+    /// Bare names like `haiku` are still accepted and treated as
+    /// `claude-code/haiku`.
+    #[arg(
+        long,
+        default_value = "claude-code/haiku",
+        visible_alias = "tokenizer-model",
+        verbatim_doc_comment
+    )]
     tokeniser_model: String,
+
+    /// Optional extractor reasoning effort.
+    ///
+    /// Accepted values: `min`, `medium`, `high`.
+    /// Supported by `claude-code`, `codex`, and `opencode`.
+    #[arg(long, verbatim_doc_comment)]
+    extractor_effort: Option<String>,
+
+    /// Optional tokeniser reasoning effort.
+    ///
+    /// Accepted values: `min`, `medium`, `high`.
+    /// Supported by `claude-code`, `codex`, and `opencode`.
+    #[arg(long, visible_alias = "tokenizer-effort", verbatim_doc_comment)]
+    tokeniser_effort: Option<String>,
 
     /// Concurrency limit for parallel session processing.
     #[arg(long, default_value = "2")]
@@ -76,9 +118,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Walk sessions, extract moments, tokenise, write entries (default).
-    Trawl {
-        path: PathBuf,
-    },
+    Trawl { path: PathBuf },
     /// Re-validate every existing entry against the current PII registry.
     /// Prints any entry whose body contains a literal the registry has
     /// ever flagged and exits non-zero. Does NOT modify files — the
@@ -89,9 +129,7 @@ enum Command {
         entries_dir: PathBuf,
     },
     /// Print stats about a session tree without trawling.
-    Stats {
-        path: PathBuf,
-    },
+    Stats { path: PathBuf },
 }
 
 fn main() -> Result<()> {
@@ -124,6 +162,13 @@ fn main() -> Result<()> {
 // ─── trawl (default) ────────────────────────────────────────────────
 
 fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
+    let extractor_stage = StageConfig::parse(&cli.extractor_model, cli.extractor_effort.as_deref())
+        .context("parse extractor model config")?;
+    let tokeniser_stage = StageConfig::parse(&cli.tokeniser_model, cli.tokeniser_effort.as_deref())
+        .context("parse tokeniser model config")?;
+    extractor_stage.preflight()?;
+    tokeniser_stage.preflight()?;
+
     let files = collect_session_files(path)?;
     println!("Found {} session files", files.len());
 
@@ -140,6 +185,8 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
 
     let extractor_sha = sha256_hex(EXTRACTOR_PROMPT.as_bytes());
     let tokeniser_sha = sha256_hex(TOKENISER_PROMPT.as_bytes());
+    let extractor_backend_signature = extractor_stage.signature();
+    let tokeniser_backend_signature = tokeniser_stage.signature();
 
     // Compute next free entry number once, then increment locally as we
     // write. Trusted because all writes go through this binary.
@@ -159,7 +206,14 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                 continue;
             }
         };
-        if state.is_fresh(file, &file_sha, &extractor_sha, &tokeniser_sha) {
+        if state.is_fresh(
+            file,
+            &file_sha,
+            &extractor_sha,
+            &tokeniser_sha,
+            &extractor_backend_signature,
+            &tokeniser_backend_signature,
+        ) {
             total_skipped_fresh += 1;
             continue;
         }
@@ -193,25 +247,26 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
             let tx = tx.clone();
             let to_process = &to_process;
             let work_queue = &work_queue;
-            let extractor_model: &str = &cli.extractor_model;
-            let tokeniser_model: &str = &cli.tokeniser_model;
+            let extractor_stage = &extractor_stage;
+            let tokeniser_stage = &tokeniser_stage;
 
-            s.spawn(move || loop {
-                let idx = {
-                    let mut q = work_queue.lock().expect("queue poisoned");
-                    q.pop()
-                };
-                let Some(idx) = idx else { break };
-                let (session_path, file_sha) = &to_process[idx];
+            s.spawn(move || {
+                loop {
+                    let idx = {
+                        let mut q = work_queue.lock().expect("queue poisoned");
+                        q.pop()
+                    };
+                    let Some(idx) = idx else { break };
+                    let (session_path, file_sha) = &to_process[idx];
 
-                let result = process_session(
-                    session_path,
-                    file_sha,
-                    extractor_model,
-                    tokeniser_model,
-                );
-                if tx.send(result.map(|drafts| (idx, file_sha.clone(), drafts))).is_err() {
-                    break;
+                    let result =
+                        process_session(session_path, file_sha, extractor_stage, tokeniser_stage);
+                    if tx
+                        .send(result.map(|drafts| (idx, file_sha.clone(), drafts)))
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
             });
         }
@@ -242,8 +297,7 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                             leak_hits.extend(reg.find_leaks(tag));
                         }
                         leak_hits.extend(reg.find_leaks(&draft.tokenised.body));
-                        let needs_review =
-                            draft.tokenised.needs_review || !leak_hits.is_empty();
+                        let needs_review = draft.tokenised.needs_review || !leak_hits.is_empty();
 
                         let project = derive_project_name(session_path);
                         let session_id = derive_session_id(session_path);
@@ -352,6 +406,8 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                                 .unwrap_or_default(),
                             extractor_prompt_sha256: extractor_sha.clone(),
                             tokeniser_prompt_sha256: tokeniser_sha.clone(),
+                            extractor_backend_signature: extractor_backend_signature.clone(),
+                            tokeniser_backend_signature: tokeniser_backend_signature.clone(),
                             trawl_version: state::CRATE_VERSION.to_string(),
                             extracted_entry_files: written,
                         },
@@ -392,10 +448,10 @@ struct TokenisedDraft {
 fn process_session(
     session_path: &Path,
     _file_sha: &str,
-    extractor_model: &str,
-    tokeniser_model: &str,
+    extractor_stage: &StageConfig,
+    tokeniser_stage: &StageConfig,
 ) -> Result<Vec<TokenisedDraft>> {
-    let drafts = extractor::extract_session(session_path, extractor_model)
+    let drafts = extractor::extract_session(session_path, extractor_stage)
         .with_context(|| format!("extract {}", session_path.display()))?;
 
     // Tolerant per-draft tokenisation: a single Haiku failure must not
@@ -403,7 +459,7 @@ fn process_session(
     // failure and keep going.
     let mut out = Vec::with_capacity(drafts.len());
     for draft in drafts {
-        match tokeniser::tokenise_entry(&draft, tokeniser_model) {
+        match tokeniser::tokenise_entry(&draft, tokeniser_stage) {
             Ok(tokenised) => {
                 // Compare the full extractor draft against the full
                 // tokenised output so the registry grows to include
@@ -447,8 +503,16 @@ fn process_session(
 /// one place.
 fn diff_literals(original: &str, tokenised: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for raw in original.split(|c: char| c.is_whitespace() || matches!(c, '\'' | '"' | '`' | ',' | ';' | '(' | ')' | '[' | ']' | '{' | '}')) {
-        let trimmed = raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '-' && c != '_' && c != '/' && c != '@');
+    for raw in original.split(|c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '\'' | '"' | '`' | ',' | ';' | '(' | ')' | '[' | ']' | '{' | '}'
+            )
+    }) {
+        let trimmed = raw.trim_matches(|c: char| {
+            !c.is_alphanumeric() && c != '.' && c != '-' && c != '_' && c != '/' && c != '@'
+        });
         if trimmed.len() < registry::MIN_LITERAL_LEN {
             continue;
         }
@@ -473,8 +537,8 @@ fn run_validate(cli: &Cli, entries_dir: &Path) -> Result<()> {
     let mut leaked = 0u32;
     let mut clean = 0u32;
     for entry in walk_markdown(entries_dir)? {
-        let raw = std::fs::read_to_string(&entry)
-            .with_context(|| format!("read {}", entry.display()))?;
+        let raw =
+            std::fs::read_to_string(&entry).with_context(|| format!("read {}", entry.display()))?;
         let scannable = extract_scannable_content(&raw);
         let hits = reg.find_leaks(&scannable);
         if !hits.is_empty() {
@@ -586,7 +650,10 @@ fn collect_session_files(path: &Path) -> Result<Vec<PathBuf>> {
     if path.is_file() {
         files.push(path.to_path_buf());
     } else if path.is_dir() {
-        for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+        for entry in walkdir::WalkDir::new(path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             let p = entry.path();
             if p.extension().and_then(|e| e.to_str()) == Some("jsonl")
                 && !p.to_string_lossy().contains("subagents")
@@ -610,7 +677,10 @@ fn walk_markdown(dir: &Path) -> Result<Vec<PathBuf>> {
     if !dir.exists() {
         return Ok(out);
     }
-    for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+    for entry in walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let p = entry.path();
         if p.extension().and_then(|e| e.to_str()) == Some("md") {
             out.push(p.to_path_buf());
@@ -683,10 +753,8 @@ mod tests {
     fn diff_literals_finds_what_was_masked() {
         // All fixture literals are ≥ 8 bytes (registry::MIN_LITERAL_LEN)
         // so the scan surfaces them rather than filtering them out.
-        let original =
-            "the user thomassen connected to dp.sa.SECRETKEY12345 from stockholm";
-        let tokenised =
-            "the user #USER_001# connected to #CRED_001# from #CITY_001#";
+        let original = "the user thomassen connected to dp.sa.SECRETKEY12345 from stockholm";
+        let tokenised = "the user #USER_001# connected to #CRED_001# from #CITY_001#";
         let leaked = diff_literals(original, tokenised);
         assert!(
             leaked.iter().any(|s| s.contains("thomassen")),

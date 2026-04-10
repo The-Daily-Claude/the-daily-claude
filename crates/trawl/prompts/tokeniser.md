@@ -158,8 +158,9 @@ A false positive costs nothing. A missed credential is a published leak.
 - Preserve everything that is not PII **verbatim**. Do not rewrite,
   summarise, translate, or "clean up" prose.
 - Preserve all role labels inside `quote` (`[HUMAN]:`, `[ASSISTANT]:`,
-  `[THINKING]:`, `[TOOL_INPUT:*]:`) and blank lines exactly. Tool
-  *results* are never quoted by the upstream extractor.
+  `[THINKING]:`, `[TOOL_INPUT:*]:`, `[TOOL_RESULT:*]:`) and blank lines
+  exactly. Upstream tool-result blocks, when present, should already be
+  brief supporting context rather than the main event.
 - Preserve the joke. If tokenising breaks the punchline (e.g. the joke
   depends on the literal string being recognisable), placeholder it
   anyway and explain in `review_reason`.

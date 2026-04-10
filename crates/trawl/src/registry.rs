@@ -87,8 +87,7 @@ impl Registry {
         if raw.trim().is_empty() {
             return Ok(Registry::default());
         }
-        serde_json::from_str(&raw)
-            .with_context(|| format!("parse registry {}", path.display()))
+        serde_json::from_str(&raw).with_context(|| format!("parse registry {}", path.display()))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -209,11 +208,7 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "trawl-test-{}-{}",
-            name,
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("trawl-test-{}-{}", name, std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("registry.json")
     }
