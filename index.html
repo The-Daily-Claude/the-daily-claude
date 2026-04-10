@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>The Daily Claude</title>
+    <meta
+      name="description"
+      content="A quiet public home for The Daily Claude and Trawl, the CLI for mining agent-session logs for the moments worth remembering."
+    >
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --bg-soft: rgba(255, 252, 247, 0.72);
+        --surface: rgba(255, 255, 255, 0.62);
+        --ink: #1f1d1a;
+        --muted: #6e6559;
+        --line: rgba(31, 29, 26, 0.12);
+        --accent: #2f6a52;
+        --shadow: 0 24px 60px rgba(47, 37, 20, 0.08);
+        --radius: 24px;
+      }
+
+      * { box-sizing: border-box; }
+
+      html {
+        background: linear-gradient(180deg, #faf6ef 0%, #f1e8da 100%);
+        color: var(--ink);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", Georgia, serif;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.85), transparent 34%),
+          radial-gradient(circle at 85% 20%, rgba(129, 171, 146, 0.18), transparent 24%),
+          linear-gradient(180deg, #faf6ef 0%, #f1e8da 100%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page {
+        width: min(1080px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 1rem 0 4rem;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 0 0;
+      }
+
+      .wordmark {
+        font-size: 0.95rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .nav {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .hero {
+        padding: 4.5rem 0 3rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+        gap: 2rem;
+        align-items: end;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 999px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.9rem;
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 1.25rem 0 1rem;
+        font-size: clamp(3rem, 6vw, 5.8rem);
+        line-height: 0.94;
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        max-width: 9ch;
+      }
+
+      .lede {
+        margin: 0;
+        max-width: 34rem;
+        font-size: 1.15rem;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .actions {
+        display: flex;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3rem;
+        padding: 0 1.1rem;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease;
+      }
+
+      .button:focus-visible,
+      .nav a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      .button.primary {
+        background: var(--ink);
+        color: #fffaf4;
+      }
+
+      .button.secondary {
+        border-color: var(--line);
+        background: rgba(255, 255, 255, 0.36);
+        color: var(--ink);
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .aside-card,
+      .quote,
+      .note {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        backdrop-filter: blur(16px);
+        box-shadow: var(--shadow);
+      }
+
+      .aside-card {
+        padding: 1.4rem;
+        animation: drift-in 700ms ease-out both;
+      }
+
+      .aside-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .aside-card strong {
+        display: block;
+        margin-bottom: 0.55rem;
+        color: var(--ink);
+        font-size: 1.05rem;
+      }
+
+      .section {
+        padding: 1.5rem 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .note,
+      .quote,
+      .closing {
+        padding: 1.35rem;
+      }
+
+      .note h2,
+      .quote h2,
+      .closing h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.2rem;
+      }
+
+      .note p,
+      .closing p,
+      .quote p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 1rem;
+      }
+
+      .quote-wrap {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+        gap: 1rem;
+        align-items: stretch;
+      }
+
+      blockquote {
+        margin: 0;
+        font-size: clamp(1.4rem, 2.4vw, 2rem);
+        line-height: 1.28;
+        letter-spacing: -0.02em;
+      }
+
+      .quote footer {
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .closing {
+        margin-top: 1rem;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 1rem;
+      }
+
+      .closing-copy {
+        max-width: 34rem;
+      }
+
+      .small {
+        margin-top: 0.9rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      @keyframes drift-in {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .quote-wrap,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .closing {
+          flex-direction: column;
+          align-items: start;
+        }
+
+        h1 {
+          max-width: 11ch;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100% - 1.2rem, 1080px);
+        }
+
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .hero {
+          padding-top: 3rem;
+        }
+
+        h1 {
+          font-size: clamp(2.7rem, 14vw, 4.2rem);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar" aria-label="Site header">
+        <a class="wordmark" href="#top">The Daily Claude</a>
+        <nav class="nav" aria-label="Primary">
+          <a href="https://github.com/The-Daily-Claude/the-daily-claude">GitHub</a>
+          <a href="https://github.com/The-Daily-Claude/the-daily-claude/tree/main/crates/trawl">Trawl</a>
+          <a href="https://github.com/The-Daily-Claude/the-daily-claude/blob/main/LICENSE">License</a>
+        </nav>
+      </header>
+
+      <section class="hero" id="top">
+        <div>
+          <div class="eyebrow">Public repo • quiet by design</div>
+          <h1>The Daily Claude</h1>
+          <p class="lede">
+            A small public home for the project and for <em>Trawl</em>, the command-line tool that mines
+            agent-session logs for the moments worth keeping.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/The-Daily-Claude/the-daily-claude/tree/main/crates/trawl">View Trawl</a>
+            <a class="button secondary" href="https://github.com/The-Daily-Claude/the-daily-claude">Browse the repo</a>
+          </div>
+        </div>
+
+        <aside class="aside-card" aria-label="Summary">
+          <strong>What lives here</strong>
+          <p>
+            The public code. The miner. The notes that explain the engineering choices. The publication itself stays separate.
+          </p>
+        </aside>
+      </section>
+
+      <section class="section" aria-label="Overview">
+        <div class="grid">
+          <article class="note">
+            <h2>Trawl</h2>
+            <p>
+              A CLI for reading Claude session transcripts and pulling out the failures, self-owns, accidental insights,
+              and other moments that survive a second reading.
+            </p>
+          </article>
+          <article class="note">
+            <h2>Plain files</h2>
+            <p>
+              Markdown in, markdown out. The tool writes entries and keeps the rest of the pipeline somebody else’s problem.
+            </p>
+          </article>
+          <article class="note">
+            <h2>Careful boundaries</h2>
+            <p>
+              The public repo holds the engineering work. Editorial material and internal tooling stay in the private workspace.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-label="Quote and context">
+        <div class="quote-wrap">
+          <article class="quote">
+            <h2>The premise</h2>
+            <blockquote>
+              “Failures, self-owns, small-scale catastrophes, weird-but-correct behaviour, accidental insights.”
+            </blockquote>
+            <footer>The working definition behind Trawl’s extractor.</footer>
+          </article>
+          <article class="note">
+            <h2>Why this exists</h2>
+            <p>
+              Most session logs are too long to revisit and too interesting to lose. Trawl gives them a second pass without
+              pretending every transcript deserves a monument.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="closing" aria-label="Call to action">
+        <div class="closing-copy">
+          <h2>Start with the repo.</h2>
+          <p>
+            If you want the implementation, the docs, or the command-line surface, they’re all in one place and easy to inspect.
+          </p>
+          <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ.</p>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/The-Daily-Claude/the-daily-claude">Open GitHub</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
