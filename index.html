@@ -297,6 +297,14 @@
         margin: 0;
         overflow-wrap: anywhere;
       }
+      .socials {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 0.7rem;
+      }
+      .socials .sep {
+        color: var(--muted);
+      }
       @keyframes drift-in {
         from {
           opacity: 0;
@@ -345,6 +353,23 @@
           white-space: pre-wrap;
           word-break: break-word;
           overflow-x: visible;
+        }
+        .socials {
+          display: block;
+        }
+        .socials a,
+        .socials .label {
+          display: inline;
+        }
+        .socials .item {
+          display: block;
+          margin-top: 0.35rem;
+        }
+        .socials .item:first-child {
+          margin-top: 0;
+        }
+        .socials .sep {
+          display: none;
         }
         h1 {
           font-size: clamp(2.7rem, 14vw, 4.2rem);
@@ -645,7 +670,15 @@ cargo build --release -p trawl
 
       <footer class="section" aria-label="Footer">
         <p class="small">AGPL-3.0-or-later. Copyright © 2026 La Bande à Bonnot OÜ.</p>
-        <p class="small">X: <a href="https://x.com/thedailyclaude">@thedailyclaude</a> · Instagram: <a href="https://www.instagram.com/the.dailyclaude/">@the.dailyclaude</a> · TikTok: <a href="https://www.tiktok.com/@thedailyclaude">@thedailyclaude</a> · Mastodon: <a rel="me" href="https://mastodon.social/@thedailyclaude">@thedailyclaude@mastodon.social</a></p>
+        <p class="small socials">
+          <span class="item"><span class="label">X:</span> <a href="https://x.com/thedailyclaude">@thedailyclaude</a></span>
+          <span class="sep">·</span>
+          <span class="item"><span class="label">Instagram:</span> <a href="https://www.instagram.com/the.dailyclaude/">@the.dailyclaude</a></span>
+          <span class="sep">·</span>
+          <span class="item"><span class="label">TikTok:</span> <a href="https://www.tiktok.com/@thedailyclaude">@thedailyclaude</a></span>
+          <span class="sep">·</span>
+          <span class="item"><span class="label">Mastodon:</span> <a rel="me" href="https://mastodon.social/@thedailyclaude">@thedailyclaude@mastodon.social</a></span>
+        </p>
       </footer>
     </main>
   </body>
