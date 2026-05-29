@@ -1,7 +1,7 @@
 ---
 title: "Surface actionable Claude subprocess failures without leaking session data"
 priority: high
-status: pending
+status: done
 ---
 
 # Surface real Claude CLI failures in `trawl`
@@ -71,12 +71,12 @@ So the actual problem is:
 
 ## Acceptance criteria
 
-- a quota-blocked Claude invocation produces an actionable `trawl`
+- [x] a quota-blocked Claude invocation produces an actionable `trawl`
   error that mentions quota/rate limit, not just exit code 1
-- an auth/login failure produces an actionable `trawl` error
-- the fix does not append raw extractor/tokeniser stdout to error chains
+- [x] an auth/login failure produces an actionable `trawl` error
+- [x] the fix does not append raw extractor/tokeniser stdout to error chains
   when that stdout may contain session-derived plaintext
-- `cargo test -p trawl` covers the new error-surfacing logic
+- [x] `cargo test -p trawl` covers the new error-surfacing logic
 
 ## Out of scope
 

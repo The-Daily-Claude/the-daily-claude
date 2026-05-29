@@ -27,7 +27,7 @@ pub struct DraftEntry {
     pub why: String,
 }
 
-/// Run the Sonnet extractor over a session jsonl file.
+/// Run the extractor over a session transcript file.
 ///
 /// Returns `Ok(vec![])` when the session contains no postable moments.
 /// Errors propagate when the subprocess fails or both parse attempts

@@ -2,16 +2,18 @@
 
 Read this at the start of every session. Update it before context compaction or session end.
 
-**Last updated:** 2026-04-10 EOD (tool-result support widened; Gemini/Codex subset runs recorded)
+**Last updated:** 2026-05-29 (Codex session-source normalization, out-of-repo runtime paths, and safe subprocess failure surfacing)
 
 ## Recent
 
 - **Capability audit completed.** The shipped `trawl` core matches the architecture claims that matter: two-stage Claude pipeline, prompt-hash cache invalidation, hashed PII registry, and race-safe create-new file publishing.
-- **`cargo test -p trawl`** — now 67/67 green after the provider-model follow-up.
+- **Todo #023 complete.** Default runtime paths now live under `~/.local/share/com.the-daily-claude.trawl/` (or `$XDG_DATA_HOME` on Linux when set to a non-empty absolute path). `--output` and `--content-root` remain as explicit overrides. No migration logic. `paths.rs` has pure helpers with full coverage for XDG/macOS edge cases.
+- **Todo #036 complete.** Non-zero Claude subprocess exits now inspect stdout+stderr for known quota/auth/API-key/flag/permission/network failures after stripping ANSI, surface only safe operator messages, and fall back to byte counts instead of dumping raw model/session-derived output into error chains.
+- **`cargo test -p trawl`** — now 104/104 green (94 lib + 10 main) after todo 023, Codex source normalization, and safe subprocess error-surfacing tests.
 - **`trawl stats ~/.claude/projects`** — exercised against the real session tree: 7,159 session files, 1,729,530,059 bytes.
 - **Todo #034 is complete in code.** Follow-up todo `#035` is now resolved; the public README has been synced to the shipped CLI and output contract.
 - **Audit caveat:** no fresh end-to-end extraction rerun was performed in this session, because that would require sending private session content back through the model again.
-- **Subset smoke test run afterwards.** Build, test, `stats`, and `--dry-run` all worked on a single small session file. Live extraction failed because the underlying Claude CLI was quota-blocked, and `trawl` only surfaced `claude exited with status Some(1)`. Follow-up todo `#036` now tracks better subprocess error surfacing.
+- **Subset smoke test run afterwards.** Build, test, `stats`, and `--dry-run` all worked on a single small session file. Live extraction failed because the underlying Claude CLI was quota-blocked; that diagnosability gap is now closed by todo `#036`.
 - **Provider-qualified model flags landed.** `--extractor-model` / `--tokeniser-model` now accept `provider/model` strings, optional per-stage effort is wired for supported backends, and the freshness cache now invalidates on backend/model/effort changes instead of only prompt hashes.
 - **Tool-result quoting policy widened.** The extractor/tokeniser contract, Rust docs, and README now allow `[TOOL_RESULT:<name>]` blocks only as brief supporting context around a stronger human / assistant / thinking beat. Tool output is no longer categorically banned, but it still must not dominate the moment.
 - **Gemini subset run completed on two known-interesting sessions.** `gemini/gemini-2.5-pro` as extractor + `gemini/gemini-2.5-flash` as tokeniser yielded 6 entries total. Quality read: 3 clear keepers, 1 decent but incomplete beat, 1 redundant beat, 1 tool-result-heavy miss. Net: promising taste on the strongest moments, but still under-extracting versus the historical baseline.
@@ -19,6 +21,9 @@ Read this at the start of every session. Update it before context compaction or 
 - **Codex high-effort subset run completed too.** Raising the extractor to `--extractor-effort high` improved the first session materially (3 real beats instead of medium's 4 with filler), but the second session sprawled back out to 5 entries and stayed noisy. Net: `high` helps precision on cleaner sessions, but does not fix Codex's tendency to over-theorise and over-quote tool-result context on messy debugging sessions.
 - **Compounded learnings added for this session.** New docs cover the tool-result quote policy, live backend ranking by subset run, and the rule that behavioral-contract changes need full-surface sync across prompts, runtime docs, README, and handoff notes.
 - **One derived-project edge case remains.** Running directly against root Claude session files showed that Rust-side project derivation can still collapse to an unhelpful root-session slug rather than a meaningful repo/project name. It is no longer LLM-generated, but the fallback still needs hardening.
+- **Codex archive detection bug fixed in the in-flight source-support patch.** Real `~/.codex/sessions/...` files currently start with `originator: "codex_exec"` and `source: "exec"`, not the older guessed `codex-tui` / `cli` shape. `session::prepare_for_extractor` now recognizes both shapes, switches current-format archives onto the normalized transcript path, and has regression tests for parser + tempfile preparation.
+- **Codex normalization widened again for actual archive traffic.** Current Codex sessions also carry `custom_tool_call` / `custom_tool_call_output` response items around edits like `apply_patch`; the first normalization pass dropped them. `session.rs` now maps those onto the same `TOOL_INPUT` / `TOOL_RESULT` transcript blocks as standard function calls and unwraps the nested JSON `"output"` payload when present, so real edit sequences are visible to the extractor instead of disappearing.
+- **Real Codex archive read-only pass succeeded after the normalization follow-up.** `cargo run -p trawl -- stats ~/.codex/sessions` reported **2,028** session files and **416,114,953** bytes on 2026-04-18; current tests are **104/104 green**.
 
 ## Repo context
 
@@ -29,6 +34,7 @@ Fresh start, no git history preserved. Everything below is the trawl/engineering
 ## What's Built and Working (trawl)
 
 - **Trawl (ZFC)** — `crates/trawl/src/` now includes provider-qualified stage config. `--extractor-model` / `--tokeniser-model` accept `provider/model` strings (`claude-code/...`, `codex/...`, `gemini/...`, `opencode/...`, `pi/...`), with optional per-stage effort for the backends that expose it. Deterministic backstop: `registry.rs` stores SHA-256 hashes + byte-lengths of every flagged literal (plaintext never on disk), and length-aware `find_leaks` probes only the window sizes actually present. Incremental state: `state.rs` hashes file content + both prompts + backend signatures + crate version; any mismatch re-trawls.
+- **Session-source prep now has a Codex path too.** `session.rs` can detect current Codex archive metadata (`codex_exec` / `exec`) as well as the older guessed `codex-tui` / `cli` variant, derive project/session metadata in Rust, and materialize a normalized role-labeled transcript for the extractor. That normalization now includes both ordinary function calls and current-format custom tool calls.
 - **`project` is now derived in Rust, not by the extractor.** The extractor prompt no longer asks the model for that field; the entry writer sets it from `derive_project_name(session_path)` at write time.
 - **Atomic write primitives in `state.rs`** — `sidecar_tmp_path` shared helper; `atomic_write` (rename-based, overwriting) and `atomic_write_exclusive` (link-based, create-new with `Ok(bool)` return for race-safe publish); `TmpFileGuard` RAII cleanup on every exit path; `MAX_SIDECAR_NAME_BYTES=200` with UTF-8-boundary truncation against POSIX `NAME_MAX`.
 - **Probe-and-retry entry publisher** — `run_trawl` in `main.rs` uses `next_number` as an advisory lower bound, loops on `atomic_write_exclusive` up to 1024 retries. Safe against concurrent Trawl runs at the syscall level.
@@ -51,16 +57,19 @@ Total 12 entries, 0 failures, ~16 min wall time at concurrency 3. State file ski
 - `cargo test -p trawl`: **67/67 green** (60 lib + 7 main)
 - Read-only real-tree check: `trawl stats ~/.claude/projects` reported **7,159** session files and **1,729,530,059** bytes
 - No fresh private-session extraction rerun was performed in this audit session
-- Later subset smoke test: one 5 KB session file built/tested cleanly, `stats` and `--dry-run` succeeded, live extraction failed due current Claude quota and exposed an error-surfacing gap rather than a CLI-contract break
+- Later subset smoke test: one 5 KB session file built/tested cleanly, `stats` and `--dry-run` succeeded, live extraction failed due current Claude quota and exposed an error-surfacing gap rather than a CLI-contract break; todo #036 now closes that gap
 - Provider-model follow-up: mixed-backend `--dry-run` succeeded with `codex/gpt-5.4-codex` as extractor and `gemini/gemini-2.5-flash` as tokeniser; `cargo test -p trawl` is now **67/67 green**
 - Live backend follow-up: end-to-end subset runs now exist for both Gemini (`gemini-2.5-pro` / `gemini-2.5-flash`) and Codex (`gpt-5.4` / `gpt-5.3-codex-spark`) on two known-interesting sessions
+- Current verification: `CARGO_HOME=/tmp/trawl-cargo-home cargo test -p trawl` passed **104/104** on 2026-05-29 while the shared Cargo package cache was locked by an unrelated build.
 
 ## What's Next (trawl priority order)
 
-1. **Todo #036 — surface actionable Claude subprocess failures.** Current quota/auth-style failures can collapse to `claude exited with status Some(1)`, which is not good enough for operators.
-2. **Todo #033 — `claude -p --bare` flag** for extractor + tokeniser. Up-to-10x SDK startup speedup if compatible with `--add-dir`, `--allowedTools Read`, `--model`, and stdin-piped prompts.
-3. **Backend quality tightening beyond the first subset runs.** Gemini and Codex both now have live end-to-end smoke evidence; next step is prompt and policy tuning to reduce Gemini under-extraction and Codex tool-result overreach / filler.
-4. **Full-corpus ZFC Trawl run** — `./target/release/trawl ~/.claude/projects/ --concurrency 3`. No longer blocked on `#034`, but do it after `#036` if you want failures to be diagnosable.
+1. **Todo #033 — `claude -p --bare` flag** for extractor + tokeniser. Up-to-10x SDK startup speedup if compatible with `--add-dir`, `--allowedTools Read`, `--model`, and stdin-piped prompts.
+2. **Todo #037 — record original source-model metadata on entries.** Entries should preserve original session model family (`claude`, `codex`, `gemini`, `glm`, `minimax`, `kimi`, etc.) and specific model ID when determinable, distinct from extractor/tokeniser backend config.
+3. **Todo #038 — finish PI support as both backend and data source.** `pi/...` is already wired as a backend config surface, but PI still needs real backend verification plus session-source ingestion support.
+4. **Remaining session-source ingestion todos** — OpenCode (#039), Gemini CLI (#040), and Cursor (#041) now have concrete tickets; Codex ingestion is implemented; PI is tracked in #038.
+5. **Backend quality tightening beyond the first subset runs.** Gemini and Codex both now have live end-to-end smoke evidence; next step is prompt and policy tuning to reduce Gemini under-extraction and Codex tool-result overreach / filler.
+6. **Full-corpus ZFC Trawl run** — `./target/release/trawl ~/.claude/projects/ --concurrency 3`.
 
 ## Compound Learnings Index (trawl/engineering subset)
 

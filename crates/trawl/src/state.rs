@@ -1,4 +1,4 @@
-//! Incremental state file (`content/.trawl-state.json`).
+//! Incremental state file.
 //!
 //! Records what was already trawled so unchanged sessions are skipped on
 //! rerun. The decision to skip is the conjunction of the file hash, both
@@ -269,9 +269,10 @@ fn session_key(session_path: &Path) -> String {
     }
 }
 
-/// Standard location for the state file: `content/.trawl-state.json`.
+/// State path under an explicit content root: `<content_root>/trawl-state.json`.
+/// When no content root is set, use `paths::default_state_path()` instead.
 pub fn default_state_path(content_root: &Path) -> PathBuf {
-    content_root.join(".trawl-state.json")
+    content_root.join("trawl-state.json")
 }
 
 /// Stable, dependency-free SHA-256 of arbitrary bytes. Returns the

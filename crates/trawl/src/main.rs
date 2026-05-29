@@ -11,12 +11,15 @@
 //! enums, no operational-pattern blacklist, no regex anonymizer, no
 //! 8-dim scoring rubric, no overlap dedup. The model is the framework.
 //!
-//! Persistence: a state file (`content/.trawl-state.json`) hashes
-//! file content + both prompts + both backend signatures + crate
-//! version to decide whether a session has already been trawled. A PII registry
-//! (`content/.pii-registry.json`) records SHA-256 digests of literal
-//! PII the tokeniser has flagged across all runs and validates every
-//! new draft against the cumulative knowledge.
+//! Persistence: a state file hashes file content + both prompts + both
+//! backend signatures + crate version to decide whether a session has
+//! already been trawled. A PII registry records SHA-256 digests of
+//! literal PII the tokeniser has flagged across all runs and validates
+//! every new draft against the cumulative knowledge.
+//!
+//! Default runtime paths live under `~/.local/share/com.the-daily-claude.trawl/`
+//! (or `$XDG_DATA_HOME/com.the-daily-claude.trawl/` on Linux when set to a
+//! non-empty absolute path). Override with `--output` and `--content-root`.
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -29,7 +32,9 @@ use uuid::Uuid;
 
 use trawl::entry::{Entry, Source};
 use trawl::extractor;
+use trawl::paths;
 use trawl::registry::{self, Registry};
+use trawl::session;
 use trawl::state::{self, SessionRecord, State, atomic_write_exclusive, sha256_file, sha256_hex};
 use trawl::tokeniser::{self, TokenisedEntry};
 
@@ -52,12 +57,12 @@ struct Cli {
     path: String,
 
     /// Output directory for extracted entry files.
-    #[arg(short, long, default_value = "content/entries")]
-    output: PathBuf,
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 
     /// Content root that holds the state file and PII registry.
-    #[arg(long, default_value = "content")]
-    content_root: PathBuf,
+    #[arg(long)]
+    content_root: Option<PathBuf>,
 
     /// Extractor model in `provider/model` form.
     ///
@@ -125,11 +130,55 @@ enum Command {
     /// operator is expected to inspect the flagged entries and fix or
     /// re-tokenise them by hand.
     Validate {
-        #[arg(default_value = "content/entries")]
+        #[arg(default_value = "")]
         entries_dir: PathBuf,
     },
     /// Print stats about a session tree without trawling.
     Stats { path: PathBuf },
+}
+
+struct ResolvedPaths {
+    output: PathBuf,
+    state_path: PathBuf,
+    registry_path: PathBuf,
+}
+
+fn resolve_paths(cli: &Cli) -> Result<ResolvedPaths> {
+    Ok(match &cli.content_root {
+        Some(content_root) => resolve_paths_with(
+            cli.output.clone(),
+            state::default_state_path(content_root),
+            registry::default_registry_path(content_root),
+            paths::default_entries_dir().context("resolve default entries dir")?,
+        ),
+        None => resolve_paths_with(
+            cli.output.clone(),
+            paths::default_state_path().context("resolve default state path")?,
+            paths::default_registry_path().context("resolve default registry path")?,
+            paths::default_entries_dir().context("resolve default entries dir")?,
+        ),
+    })
+}
+
+fn default_entries_dir_or_supplied(entries_dir: &Path) -> Result<PathBuf> {
+    if entries_dir.as_os_str().is_empty() {
+        paths::default_entries_dir()
+    } else {
+        Ok(entries_dir.to_path_buf())
+    }
+}
+
+fn resolve_paths_with(
+    output_override: Option<PathBuf>,
+    default_state_path: PathBuf,
+    default_registry_path: PathBuf,
+    default_output: PathBuf,
+) -> ResolvedPaths {
+    ResolvedPaths {
+        output: output_override.unwrap_or(default_output),
+        state_path: default_state_path,
+        registry_path: default_registry_path,
+    }
 }
 
 fn main() -> Result<()> {
@@ -137,7 +186,7 @@ fn main() -> Result<()> {
 
     match &cli.command {
         Some(Command::Validate { entries_dir }) => {
-            let entries_dir = entries_dir.clone();
+            let entries_dir = default_entries_dir_or_supplied(entries_dir)?;
             run_validate(&cli, &entries_dir)
         }
         Some(Command::Stats { path }) => {
@@ -172,11 +221,12 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
     let files = collect_session_files(path)?;
     println!("Found {} session files", files.len());
 
-    let state_path = state::default_state_path(&cli.content_root);
-    let registry_path = registry::default_registry_path(&cli.content_root);
+    let rp = resolve_paths(cli)?;
+    let state_path = &rp.state_path;
+    let registry_path = &rp.registry_path;
 
-    let mut state = State::load(&state_path)?;
-    let mut reg = Registry::load(&registry_path)?;
+    let mut state = State::load(state_path)?;
+    let mut reg = Registry::load(registry_path)?;
     println!(
         "State: {} known sessions | Registry: {} known PII hashes",
         state.sessions.len(),
@@ -190,7 +240,7 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
 
     // Compute next free entry number once, then increment locally as we
     // write. Trusted because all writes go through this binary.
-    let mut next_number = max_existing_entry_number(&cli.output) + 1;
+    let mut next_number = max_existing_entry_number(&rp.output) + 1;
     let mut total_extracted = 0u32;
     let mut total_skipped_fresh = 0u32;
     let mut total_failed = 0u32;
@@ -239,7 +289,7 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
     let concurrency = cli.concurrency.max(1);
     let work_queue: Mutex<Vec<usize>> = Mutex::new((0..to_process.len()).rev().collect());
 
-    type SessionResult = Result<(usize, String, Vec<TokenisedDraft>)>;
+    type SessionResult = Result<(usize, String, String, String, Vec<TokenisedDraft>)>;
     let (tx, rx) = mpsc::channel::<SessionResult>();
 
     std::thread::scope(|s| {
@@ -262,7 +312,9 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                     let result =
                         process_session(session_path, file_sha, extractor_stage, tokeniser_stage);
                     if tx
-                        .send(result.map(|drafts| (idx, file_sha.clone(), drafts)))
+                        .send(result.map(|(project_name, session_id, drafts)| {
+                            (idx, file_sha.clone(), project_name, session_id, drafts)
+                        }))
                         .is_err()
                     {
                         break;
@@ -274,7 +326,7 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
 
         while let Ok(result) = rx.recv() {
             match result {
-                Ok((idx, file_sha, drafts)) => {
+                Ok((idx, file_sha, project_name, session_id, drafts)) => {
                     let session_path = &to_process[idx].0;
                     let mut written = Vec::new();
 
@@ -299,9 +351,6 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                         leak_hits.extend(reg.find_leaks(&draft.tokenised.body));
                         let needs_review = draft.tokenised.needs_review || !leak_hits.is_empty();
 
-                        let project = derive_project_name(session_path);
-                        let session_id = derive_session_id(session_path);
-
                         let entry = Entry {
                             id: Uuid::now_v7(),
                             // All user-visible metadata comes from the
@@ -310,12 +359,12 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                             // just as easily as the body and must go
                             // through the same scrub.
                             title: draft.tokenised.title.clone(),
-                            project: project.clone(),
+                            project: project_name.clone(),
                             category: draft.tokenised.category.clone(),
                             tags: draft.tokenised.tags.clone(),
                             source: Source {
                                 source_type: "session".to_string(),
-                                session_id: Some(session_id),
+                                session_id: Some(session_id.clone()),
                                 project_path: None,
                                 message_range: None,
                                 extracted_at: Utc::now(),
@@ -358,7 +407,7 @@ fn run_trawl(cli: &Cli, path: &Path) -> Result<()> {
                                 break None;
                             }
                             let filename = entry.filename(next_number);
-                            let path = cli.output.join(&filename);
+                            let path = rp.output.join(&filename);
                             match atomic_write_exclusive(&path, body_bytes) {
                                 Ok(true) => break Some(filename),
                                 Ok(false) => {
@@ -450,8 +499,10 @@ fn process_session(
     _file_sha: &str,
     extractor_stage: &StageConfig,
     tokeniser_stage: &StageConfig,
-) -> Result<Vec<TokenisedDraft>> {
-    let drafts = extractor::extract_session(session_path, extractor_stage)
+) -> Result<(String, String, Vec<TokenisedDraft>)> {
+    let prepared = session::prepare_for_extractor(session_path)
+        .with_context(|| format!("prepare {}", session_path.display()))?;
+    let drafts = extractor::extract_session(prepared.extractor_path(), extractor_stage)
         .with_context(|| format!("extract {}", session_path.display()))?;
 
     // Tolerant per-draft tokenisation: a single Haiku failure must not
@@ -489,7 +540,7 @@ fn process_session(
             }
         }
     }
-    Ok(out)
+    Ok((prepared.project_name, prepared.session_id, out))
 }
 
 /// Heuristic: any token in the original quote that no longer appears in
@@ -526,8 +577,9 @@ fn diff_literals(original: &str, tokenised: &str) -> Vec<String> {
 // ─── validate subcommand ────────────────────────────────────────────
 
 fn run_validate(cli: &Cli, entries_dir: &Path) -> Result<()> {
-    let registry_path = registry::default_registry_path(&cli.content_root);
-    let reg = Registry::load(&registry_path)?;
+    let rp = resolve_paths(cli)?;
+    let registry_path = &rp.registry_path;
+    let reg = Registry::load(registry_path)?;
 
     if reg.is_empty() {
         println!("Registry is empty — nothing to validate against.");
@@ -715,39 +767,10 @@ fn max_existing_entry_number(dir: &Path) -> u32 {
         .unwrap_or(0)
 }
 
-fn derive_project_name(session_path: &Path) -> String {
-    // Claude Code project paths look like:
-    //   .../projects/-Users-<user>-Projects-<org>-<repo>/<uuid>.jsonl
-    // We use the parent directory's last 2 dash-segments as a display
-    // name. This is a heuristic, not security-sensitive — the tokeniser
-    // will scrub anything that needs scrubbing.
-    let parent = session_path
-        .parent()
-        .and_then(|p| p.file_name())
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown");
-
-    parent
-        .rsplit('-')
-        .take(2)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
-fn derive_session_id(session_path: &Path) -> String {
-    session_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown")
-        .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn diff_literals_finds_what_was_masked() {
@@ -780,18 +803,65 @@ mod tests {
     }
 
     #[test]
-    fn derive_project_name_takes_last_two_segments() {
-        let p = PathBuf::from(
-            "/Users/x/.claude/projects/-Users-alice-Projects-example-the-daily-claude/abc.jsonl",
-        );
-        let name = derive_project_name(&p);
-        assert_eq!(name, "daily-claude");
-    }
-
-    #[test]
     fn max_existing_entry_number_handles_missing_dir() {
         let dir = std::env::temp_dir().join(format!("trawl-no-such-{}", std::process::id()));
         assert_eq!(max_existing_entry_number(&dir), 0);
+    }
+
+    #[test]
+    fn resolve_paths_with_uses_defaults_when_overrides_missing() {
+        let resolved = resolve_paths_with(
+            None,
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/trawl-state.json"),
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/pii-registry.json"),
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/the-stash/entries"),
+        );
+
+        assert_eq!(
+            resolved.output,
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/the-stash/entries")
+        );
+        assert_eq!(
+            resolved.state_path,
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/trawl-state.json")
+        );
+        assert_eq!(
+            resolved.registry_path,
+            PathBuf::from("/home/alice/.local/share/com.the-daily-claude.trawl/pii-registry.json")
+        );
+    }
+
+    #[test]
+    fn resolve_paths_with_honours_output_and_content_root_overrides() {
+        let resolved = resolve_paths_with(
+            Some(PathBuf::from("/tmp/custom-entries")),
+            PathBuf::from("/tmp/custom-root/trawl-state.json"),
+            PathBuf::from("/tmp/custom-root/pii-registry.json"),
+            PathBuf::from("/unused/default-output"),
+        );
+
+        assert_eq!(resolved.output, PathBuf::from("/tmp/custom-entries"));
+        assert_eq!(
+            resolved.state_path,
+            PathBuf::from("/tmp/custom-root/trawl-state.json")
+        );
+        assert_eq!(
+            resolved.registry_path,
+            PathBuf::from("/tmp/custom-root/pii-registry.json")
+        );
+    }
+
+    #[test]
+    fn default_entries_dir_or_supplied_uses_default_for_empty_validate_arg() {
+        let resolved = default_entries_dir_or_supplied(Path::new("")).unwrap();
+        assert!(resolved.ends_with("the-stash/entries"));
+    }
+
+    #[test]
+    fn default_entries_dir_or_supplied_keeps_explicit_validate_arg() {
+        let explicit = Path::new("content/entries");
+        let resolved = default_entries_dir_or_supplied(explicit).unwrap();
+        assert_eq!(resolved, explicit);
     }
 
     #[test]

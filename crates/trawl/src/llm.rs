@@ -4,6 +4,99 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\x1b' {
+            if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                let mut j = i + 2;
+                while j < bytes.len() && !matches!(bytes[j], b'A'..=b'z') {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    i = j + 1;
+                    continue;
+                }
+            }
+            i += 1;
+            continue;
+        }
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+    result
+}
+
+fn classify_failure(raw_output: &str) -> Option<String> {
+    let stripped = strip_ansi(raw_output);
+    let combined = raw_output.to_string() + "\n" + &stripped;
+    let lower = combined.to_lowercase();
+
+    if lower.contains("you've hit your limit")
+        || lower.contains("rate limit")
+        || lower.contains("quota")
+    {
+        return Some(
+            "Claude API quota exceeded or rate limit hit. Check the CLI output for reset timing."
+                .to_string(),
+        );
+    }
+    if lower.contains("not authenticated")
+        || lower.contains("please run `claude auth")
+        || lower.contains("claude auth")
+    {
+        return Some("Claude is not authenticated. Run `claude auth` to log in.".to_string());
+    }
+    if lower.contains("invalid api key") || lower.contains("api key invalid") {
+        return Some(
+            "Claude API key is invalid. Check your ANTHROPIC_API_KEY environment variable."
+                .to_string(),
+        );
+    }
+    if lower.contains("unsupported flag") || lower.contains("unknown flag") {
+        return Some(
+            "Claude CLI received an unsupported flag. Ensure your Claude CLI version is up to date."
+                .to_string(),
+        );
+    }
+    if lower.contains("permission denied") || lower.contains("permission_error") {
+        return Some(
+            "Claude CLI permission error. Check file/directory access permissions.".to_string(),
+        );
+    }
+    if lower.contains("econnrefused") || lower.contains("connection refused") {
+        return Some(
+            "Could not connect to Claude API. Check your network connection and API endpoint."
+                .to_string(),
+        );
+    }
+    None
+}
+
+fn nonzero_exit_error(
+    program: &str,
+    code: Option<i32>,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> anyhow::Error {
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(stderr),
+        String::from_utf8_lossy(stdout)
+    );
+    if let Some(actionable) = classify_failure(&combined) {
+        return anyhow!("{program} exited with status {code:?}: {actionable}");
+    }
+
+    anyhow!(
+        "{program} exited with status {code:?}; no safe diagnostic matched (stdout {} bytes, stderr {} bytes)",
+        stdout.len(),
+        stderr.len()
+    )
+}
+
 /// One stage's LLM configuration: runner/provider, model identifier,
 /// and optional normalized reasoning effort.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -381,11 +474,11 @@ impl Invocation {
             .with_context(|| format!("waiting on `{}`", self.program))?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!(
-                "{} exited with status {:?}: {stderr}",
-                self.program,
-                output.status.code()
+            return Err(nonzero_exit_error(
+                &self.program,
+                output.status.code(),
+                &output.stdout,
+                &output.stderr,
             ));
         }
 
@@ -515,5 +608,121 @@ mod tests {
                 .args
                 .contains(&"minimax-coding-plan/MiniMax-M2.7".to_string())
         );
+    }
+
+    #[test]
+    fn strip_ansi_removes_escape_sequences() {
+        assert_eq!(strip_ansi("\x1b[31mred\x1b[0m"), "red");
+        assert_eq!(strip_ansi("\x1b[1;32mgreen\x1b[0m"), "green");
+        assert_eq!(strip_ansi("plain text"), "plain text");
+        assert_eq!(strip_ansi(""), "");
+        assert_eq!(strip_ansi("\x1b[38;5;208mOrange\x1b[0m"), "Orange");
+    }
+
+    #[test]
+    fn classify_failure_detects_quota_limit() {
+        let msg = "You've hit your limit · resets 8am (UTC)";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        let msg = got.unwrap();
+        assert!(msg.contains("quota") || msg.contains("rate limit"));
+    }
+
+    #[test]
+    fn classify_failure_detects_quota_ansi_escaped() {
+        let msg = "\x1b[31m\x1b[1mYou've hit your limit\x1b[0m · resets 8am (UTC)";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+    }
+
+    #[test]
+    fn classify_failure_detects_auth_not_authenticated() {
+        let msg = "Not authenticated. Please run `claude auth` to log in.";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        let msg = got.unwrap();
+        assert!(msg.contains("authenticate") || msg.contains("claude auth"));
+    }
+
+    #[test]
+    fn classify_failure_detects_auth_please_run_claude_auth() {
+        let msg = "Please run `claude auth` to authenticate.";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+    }
+
+    #[test]
+    fn classify_failure_detects_invalid_api_key() {
+        let msg = "Error: invalid api key";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        assert!(got.unwrap().contains("API key"));
+    }
+
+    #[test]
+    fn classify_failure_detects_unsupported_flag() {
+        let msg = "error: unsupported flag '--foo'";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        assert!(got.unwrap().contains("unsupported flag"));
+    }
+
+    #[test]
+    fn classify_failure_detects_permission_denied() {
+        let msg = "Permission denied accessing /some/path";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        assert!(got.unwrap().contains("permission"));
+    }
+
+    #[test]
+    fn classify_failure_detects_connection_refused() {
+        let msg = "Error: ECONNREFUSED";
+        let got = classify_failure(msg);
+        assert!(got.is_some());
+        let msg = got.unwrap();
+        assert!(msg.contains("connect") || msg.contains("network"));
+    }
+
+    #[test]
+    fn classify_failure_returns_none_for_session_like_content() {
+        let content = r#"The user said "hello world" and then asked about dp.sa.SECRETTOKEN"#;
+        let got = classify_failure(content);
+        assert!(
+            got.is_none(),
+            "session plaintext should not be classified as actionable: {got:?}"
+        );
+    }
+
+    #[test]
+    fn classify_failure_returns_none_for_mixed_content_without_known_patterns() {
+        let content = r#"Some error happened but nothing we recognize about limits or login"#;
+        let got = classify_failure(content);
+        assert!(got.is_none());
+    }
+
+    #[test]
+    fn nonzero_exit_error_surfaces_known_stdout_failure() {
+        let err = nonzero_exit_error(
+            "claude",
+            Some(1),
+            b"You've hit your limit \xc2\xb7 resets 8am (UTC)",
+            b"",
+        );
+        let msg = err.to_string();
+        assert!(msg.contains("quota") || msg.contains("rate limit"));
+        assert!(!msg.contains("resets 8am"));
+    }
+
+    #[test]
+    fn nonzero_exit_error_does_not_dump_unknown_output() {
+        let stdout = b"session plaintext dp.sa.SECRETTOKEN";
+        let stderr = b"more sensitive stderr";
+        let err = nonzero_exit_error("claude", Some(1), stdout, stderr);
+        let msg = err.to_string();
+        assert!(msg.contains(&format!("stdout {} bytes", stdout.len())));
+        assert!(msg.contains(&format!("stderr {} bytes", stderr.len())));
+        assert!(!msg.contains("SECRETTOKEN"));
+        assert!(!msg.contains("sensitive stderr"));
     }
 }

@@ -1,7 +1,7 @@
 ---
 title: "Move Trawl state + PII registry out of the content repo"
 priority: low
-status: pending
+status: done
 depends_on: 022
 ---
 
@@ -65,25 +65,22 @@ outside the repo.
 
 ## Implementation
 
-- [ ] Add a `data_dir()` helper that returns
+- [x] Add a `data_dir()` helper that returns
       `$XDG_DATA_HOME/com.the-daily-claude.trawl/` with a fallback to
-      `~/.local/share/com.the-daily-claude.trawl/`. Use the `dirs` or
-      `directories` crate to handle platform differences cleanly.
-- [ ] On first run, create the dir with `0700` perms (including the
-      `the-stash/entries/` subdir).
-- [ ] Update Trawl to read/write `pii-registry.json` and `trawl-state.json`
+      `~/.local/share/com.the-daily-claude.trawl/`.
+- [x] Update Trawl to read/write `pii-registry.json` and `trawl-state.json`
       from `data_dir()` instead of `content/`.
-- [ ] Update Trawl's default output directory for extracted entries to
+- [x] Update Trawl's default output directory for extracted entries to
       `data_dir()/the-stash/entries/` (override via `-o` flag as today).
-- [ ] Migration: if `content/.trawl-state.json` or
-      `content/.pii-registry.json` exists on startup, atomically move
-      them into `data_dir()` and leave a small `.moved-to` marker
-      pointing at the new location for one release cycle.
-- [ ] Update `trawl validate` and any other commands that touched the
+- [x] Update `trawl validate` and any other commands that touched the
       old paths.
-- [ ] Update the doc comment at the top of `crates/trawl/src/registry.rs`
+- [x] Update the doc comment at the top of `crates/trawl/src/registry.rs`
       to reference the new location instead of `content/.pii-registry.json`.
-- [ ] Document the new location in HANDOFF.md and the project README.
+- [x] Document the new location in HANDOFF.md and the project README.
+
+Deliberate simplification from the original sketch: no migration logic and no
+manual permission management. Old repo-local files are left in place; the
+atomic write helpers create the new parent directories on first write.
 
 ## Cross-platform notes
 
@@ -101,13 +98,10 @@ outside the repo.
 
 ## Acceptance
 
-- [ ] State + registry + stash all live under
-      `$XDG_DATA_HOME/com.the-daily-claude.trawl/` after migration
-- [ ] Existing files in `content/` are moved, not copied, with a
-      breadcrumb left behind
-- [ ] Wiping `content/` no longer destroys runtime state or stash
-- [ ] Cloning the repo on a fresh machine still discovers existing
+- [x] State + registry + stash all live under
+      `$XDG_DATA_HOME/com.the-daily-claude.trawl/` by default
+- [x] Wiping `content/` no longer destroys runtime state or stash
+- [x] Cloning the repo on a fresh machine still discovers existing
       state from the user's home dir
-- [ ] Permissions on the data dir are `0700`
-- [ ] `crates/trawl/src/registry.rs` doc comment updated
-- [ ] HANDOFF.md and README mention the new location
+- [x] `crates/trawl/src/registry.rs` doc comment updated
+- [x] HANDOFF.md and README mention the new location

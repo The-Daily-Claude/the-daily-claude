@@ -22,17 +22,14 @@
 //!
 //! # Storage location
 //!
-//! **v1 (today):** `content/.pii-registry.json`, inside the caller's
-//! content repo, gitignored.
-//!
-//! **Target (tracked in `todos/023-trawl-state-out-of-repo.md`):**
 //! `~/.local/share/com.the-daily-claude.trawl/pii-registry.json` on both
-//! macOS and Linux — `$XDG_DATA_HOME` on Linux, the same path literal on
-//! macOS for cross-platform parity (deliberately NOT
-//! `~/Library/Application Support/`). Outside any repo, per-machine,
-//! `0700` perms. Cloning the repo on a fresh machine inherits the
-//! user's accumulated registry from their home dir, and wiping
-//! `content/` no longer destroys runtime state.
+//! macOS and Linux — `$XDG_DATA_HOME` on Linux (when set to a non-empty
+//! absolute path), the same path literal on macOS for cross-platform
+//! parity (deliberately NOT `~/Library/Application Support/`). Outside
+//! any repo, per-machine. Cloning the repo on a fresh machine inherits
+//! the user's accumulated registry from their home dir, and wiping
+//! a content tree no longer destroys runtime state. Override with
+//! `--content-root` for explicit paths.
 
 use crate::state::{atomic_write, hex_encode_into_buf, sha256_bytes, sha256_hex};
 use anyhow::{Context, Result};
@@ -198,9 +195,10 @@ impl Registry {
     }
 }
 
-/// Standard registry path: `<content_root>/.pii-registry.json`.
+/// Registry path under an explicit content root: `<content_root>/pii-registry.json`.
+/// When no content root is set, use `paths::default_registry_path()` instead.
 pub fn default_registry_path(content_root: &Path) -> PathBuf {
-    content_root.join(".pii-registry.json")
+    content_root.join("pii-registry.json")
 }
 
 #[cfg(test)]

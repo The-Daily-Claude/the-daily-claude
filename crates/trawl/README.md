@@ -1,14 +1,14 @@
 # trawl
 
-A CLI that mines Claude Code session logs and extracts the moments worth remembering — failures, self-owns, small-scale catastrophes, weird-but-correct behaviour, accidental insights — into anonymised markdown entries.
+A CLI that mines coding-assistant session logs and extracts the moments worth remembering — failures, self-owns, small-scale catastrophes, weird-but-correct behaviour, accidental insights — into anonymised markdown entries.
 
 ## What it does
 
-Claude Code writes a JSONL transcript per session under `~/.claude/projects/<slug>/<uuid>.jsonl`. Each line is a message: user prompt, assistant response, tool call, tool result. Over months, a heavy user accumulates thousands of these sessions, most of them forgettable and a few of them memorable. `trawl` reads the forgettable and the memorable all together, asks Claude which moments are worth keeping, and writes the keepers to a directory of markdown files.
+Claude Code writes a JSONL transcript per session under `~/.claude/projects/<slug>/<uuid>.jsonl`. Codex CLI writes event-stream JSONL sessions under `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Over months, a heavy user accumulates thousands of these sessions, most of them forgettable and a few of them memorable. `trawl` reads the forgettable and the memorable all together, asks the configured extractor backend which moments are worth keeping, and writes the keepers to a directory of markdown files.
 
 Two stages, one configured CLI call each. The default backend is Claude Code, but both stages now accept provider-qualified model strings:
 
-1. **Extractor** — reads a session JSONL, identifies candidate moments (rage, comedy, catastrophe, insight, meta), returns a structured list of drafts with verbatim quotes. Tool results may appear only as short supporting context, never as the dominant voice of the moment.
+1. **Extractor** — reads a session transcript, identifies candidate moments (rage, comedy, catastrophe, insight, meta), returns a structured list of drafts with verbatim quotes. Tool results may appear only as short supporting context, never as the dominant voice of the moment.
 2. **Tokeniser** — reads one draft at a time and returns placeholderised `title`, `category`, `tags`, and `body`, plus an `entities` graph and review flags. Sensitive spans are replaced with `#TYPE_NNN#` tokens such as `#USER_001#`, `#ORG_001#`, or `#CRED_001#`. The sidecar graph preserves only placeholder relationships, never raw values.
 
 Supported provider prefixes today:
@@ -22,6 +22,13 @@ Supported provider prefixes today:
 Everything after the first slash is treated as opaque backend-specific model text. So `opencode/minimax-coding-plan/MiniMax-M2.7` and `pi/zai-coding-plan/glm-5.1` are both valid model strings.
 
 Both stages are still pure CLI invocations — no Rust-side classifiers wrapping the model, no regex decision trees. See `docs/solutions/design-decisions/zero-framework-cognition-20260320.md` for why.
+
+Input source support today:
+
+- Raw Claude Code JSONL sessions under `~/.claude/projects/`
+- Raw Codex CLI JSONL sessions under `~/.codex/sessions/`
+
+Codex sessions are normalized into the same role-labeled transcript shape the extractor expects before the model sees them. That keeps source support deterministic: Rust handles schema translation, the model handles editorial judgment.
 
 ## Deterministic safety net
 
@@ -44,6 +51,9 @@ cargo build --release -p trawl
 # Dry-run a single session (no writes, no model calls; prints which sessions would be trawled)
 ./target/release/trawl --dry-run ~/.claude/projects/<slug>/<uuid>.jsonl
 
+# Dry-run a Codex CLI session
+./target/release/trawl --dry-run ~/.codex/sessions/2026/04/13/rollout-2026-04-13T23-03-57-<id>.jsonl
+
 # Use a provider-qualified extractor model and a fast Gemini tokeniser
 ./target/release/trawl \
   --extractor-model codex/gpt-5.4-codex \
@@ -60,13 +70,16 @@ cargo build --release -p trawl
   ~/.claude/projects/<slug>/<uuid>.jsonl -o content/entries/
 
 # Extract from a whole project tree, parallel across sessions
-./target/release/trawl ~/.claude/projects/ --concurrency 3 -o content/entries/
+./target/release/trawl ~/.claude/projects/ --concurrency 3
+
+# Extract from the full Codex session archive
+./target/release/trawl ~/.codex/sessions/ --concurrency 3
 
 # Stats for a project tree (currently total file count and total bytes)
 ./target/release/trawl stats ~/.claude/projects/
 
 # Validate existing entries against the accumulated PII registry
-./target/release/trawl validate content/entries/
+./target/release/trawl validate
 ```
 
 See `src/main.rs` for the full CLI surface.
@@ -162,7 +175,7 @@ What does **not** currently land on disk:
 
 ## State and registry
 
-v1 stores the PII registry and incremental state under `content/.pii-registry.json` and `content/.trawl-state.json`, gitignored. The target layout (tracked in `todos/023-trawl-state-out-of-repo.md`) is:
+Runtime state and the PII registry live outside the content repo by default, under `~/.local/share/com.the-daily-claude.trawl/`:
 
 ```
 ~/.local/share/com.the-daily-claude.trawl/
@@ -171,7 +184,9 @@ v1 stores the PII registry and incremental state under `content/.pii-registry.js
   trawl-state.json
 ```
 
-…on both Linux (via `$XDG_DATA_HOME`) and macOS (as a literal — deliberately not `~/Library/Application Support/`). Until that lands, the state lives inside the caller's content repo as a gitignored pair.
+On Linux, `$XDG_DATA_HOME` is honoured when set to a non-empty absolute path; otherwise `~/.local/share` is used. On macOS the literal `~/.local/share` path is used deliberately (not `~/Library/Application Support/`) for cross-platform parity.
+
+Override with `--output` (entries dir) and `--content-root` (state + registry root). No migration logic — old repo-local files are left in place.
 
 ## Tests
 
@@ -179,7 +194,7 @@ v1 stores the PII registry and incremental state under `content/.pii-registry.js
 cargo test -p trawl
 ```
 
-67 tests at the time of writing. Includes a 32-thread concurrent-writer race on `atomic_write_exclusive` to catch the kind of file-publish bug that made entry-number collisions possible in v1.
+104 tests at the time of writing (94 lib + 10 main), including session-source tests for both Claude pass-through and Codex normalization (current `codex_exec`/`exec` and legacy `codex-tui`/`cli` archive shapes, plus `custom_tool_call`/`custom_tool_call_output` items), runtime-path override/default coverage, and safe subprocess failure classification. Includes a 32-thread concurrent-writer race on `atomic_write_exclusive` to catch the kind of file-publish bug that made entry-number collisions possible in v1.
 
 ## License
 
